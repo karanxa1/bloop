@@ -1,0 +1,353 @@
+<!doctype html>
+<html lang="en" class="scroll-smooth">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>bloop — tiny blob. big brain.</title>
+  <meta name="description" content="bloop is a general ai agent that acts across your apps. tiny blob. big brain." />
+
+  <!-- tailwind cdn + theme -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: { bloop: '#8DC63F', olive: '#5C8A2C', ink: '#171717' },
+          fontFamily: {
+            display: ['"Baloo 2"', 'ui-rounded', 'system-ui', 'sans-serif'],
+            body: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+          },
+          keyframes: {
+            'hero-pop': {
+              '0%': { opacity: '0', transform: 'scale(.96)', filter: 'blur(8px)' },
+              '100%': { opacity: '1', transform: 'scale(1)', filter: 'blur(0)' },
+            },
+            reveal: {
+              '0%': { opacity: '0', transform: 'translateY(20px)' },
+              '100%': { opacity: '1', transform: 'translateY(0)' },
+            },
+            'panel-zoom': {
+              '0%': { transform: 'scale(1)' },
+              '100%': { transform: 'scale(1.06)' },
+            },
+          },
+          animation: {
+            'hero-pop': 'hero-pop .7s ease-out both',
+            reveal: 'reveal .65s ease-out both',
+            'panel-zoom': 'panel-zoom linear both',
+          },
+        },
+      },
+    };
+  </script>
+
+  <!-- fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@700;800&family=Inter:wght@400;500;600&display=swap"
+    rel="stylesheet"
+  />
+</head>
+
+<body class="bg-[#F2F2F2] font-body lowercase text-ink antialiased">
+  <a
+    href="#features"
+    class="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:bg-white focus:px-4 focus:py-2 focus:text-sm focus:text-ink"
+    >skip to content</a
+  >
+
+  <!-- ============ 1. hero — full-bleed photo, sticker wordmark, lime cta ============ -->
+  <header id="top" class="relative flex h-screen min-h-[38rem] flex-col overflow-hidden">
+    <img
+      src="assets/hero.jpg"
+      alt="motion-blurred green tree canopy streaking past a bright blue sky"
+      class="absolute inset-0 h-full w-full object-cover"
+    />
+
+    <nav class="relative z-10 flex items-center justify-between px-6 py-6 sm:px-10" aria-label="primary">
+      <a
+        href="#top"
+        class="flex items-center gap-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-olive"
+      >
+        <img src="assets/logo-blob.png" alt="bloop logo — a small white rounded blob" class="h-9 w-9" />
+        <span class="font-display text-xl font-extrabold text-white [text-shadow:0_1px_10px_rgb(0_0_0/0.4)]">bloop</span>
+      </a>
+      <ul class="hidden items-center gap-8 text-sm font-medium text-white [text-shadow:0_1px_8px_rgb(0_0_0/0.4)] sm:flex">
+        <li>
+          <a href="#features" class="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white">features</a>
+        </li>
+        <li>
+          <a href="#numbers" class="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white">numbers</a>
+        </li>
+        <li>
+          <a href="#access" class="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white">get access</a>
+        </li>
+      </ul>
+    </nav>
+
+    <div class="relative z-10 flex flex-1 flex-col items-center justify-center px-6 pb-16 text-center">
+      <h1
+        class="font-display text-[26vw] font-extrabold leading-[0.85] text-bloop [-webkit-text-stroke:0.05em_#fff] [paint-order:stroke_fill] motion-safe:animate-hero-pop sm:text-[20vw] lg:text-[15rem]"
+      >
+        bloop
+      </h1>
+      <p class="mt-6 max-w-md text-balance text-base text-white [text-shadow:0_1px_12px_rgb(0_0_0/0.5)] sm:text-lg">
+        one tiny agent that does the doing across all your apps.
+      </p>
+      <a
+        href="#access"
+        class="mt-10 inline-flex items-center rounded-full bg-bloop px-8 py-4 font-display text-lg font-bold text-ink transition-[transform,background-color] duration-200 ease-out hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink focus-visible:ring-offset-2 focus-visible:ring-offset-bloop motion-safe:hover:-translate-y-0.5 motion-reduce:transition-[background-color]"
+        >get bloop</a
+      >
+    </div>
+  </header>
+
+  <!-- stick context: tagline stays pinned while the photo panel slides over it -->
+  <div class="relative">
+    <!-- ============ 2. sticky tagline band — solid lime ============ -->
+    <section class="sticky top-0 flex h-[85vh] items-center overflow-hidden bg-bloop" aria-label="tagline">
+      <div aria-hidden="true" class="pointer-events-none absolute -left-40 -top-40 grid h-[36rem] w-[36rem] place-items-center">
+        <div class="absolute h-[36rem] w-[36rem] rounded-full border border-white/20"></div>
+        <div class="absolute h-[26rem] w-[26rem] rounded-full border border-white/20"></div>
+        <div class="absolute h-[16rem] w-[16rem] rounded-full border border-white/20"></div>
+      </div>
+      <div class="px-6 sm:px-10 lg:px-20">
+        <p class="font-display text-[16vw] font-extrabold leading-[0.92] text-ink sm:text-[11vw] lg:text-[9rem]">tiny blob.</p>
+        <p
+          class="font-display text-[16vw] font-extrabold leading-[0.92] text-ink [-webkit-text-stroke:0.045em_#fff] [paint-order:stroke_fill] sm:text-[11vw] lg:text-[9rem]"
+        >
+          big brain.
+        </p>
+      </div>
+    </section>
+
+    <!-- ============ photo panel — scrolls over the sticky band ============ -->
+    <section class="relative h-[80vh] overflow-hidden" aria-label="underwater light">
+      <img
+        src="assets/underwater.jpg"
+        alt="sunlight rays bending through green-tinted water, smeared with motion blur"
+        class="h-full w-full scale-[1.03] object-cover motion-safe:animate-panel-zoom motion-safe:[animation-timeline:view()]"
+      />
+    </section>
+  </div>
+
+  <!-- ============ 3. features — white cards on lime ============ -->
+  <section id="features" class="relative overflow-hidden bg-bloop px-6 py-24 sm:px-10 lg:px-20 lg:py-32">
+    <div aria-hidden="true" class="pointer-events-none absolute -right-48 -top-48 grid h-[40rem] w-[40rem] place-items-center">
+      <div class="absolute h-[40rem] w-[40rem] rounded-full border border-olive/25"></div>
+      <div class="absolute h-[30rem] w-[30rem] rounded-full border border-olive/25"></div>
+      <div class="absolute h-[20rem] w-[20rem] rounded-full border border-olive/25"></div>
+    </div>
+
+    <div class="relative mx-auto max-w-6xl">
+      <p class="text-xs font-semibold tracking-[0.2em] text-ink/60">what bloop does</p>
+      <h2 class="mt-3 font-display text-4xl font-extrabold text-ink sm:text-5xl">three jobs. one blob.</h2>
+
+      <div class="mt-14 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+        <!-- card: acts, not chats -->
+        <article
+          data-reveal
+          class="bg-white p-8 opacity-0 transition-[transform,background-color] duration-200 ease-out motion-safe:hover:-translate-y-1 motion-reduce:transition-[background-color] hover:bg-[#F2F2F2]"
+        >
+          <svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-12 w-12 text-olive" aria-hidden="true">
+            <path d="M24 5c9 0 17 6 17 15 0 9-4 14-10 17-6 3-13 3-17-1-4-4-6-11-4-17C12 12 16 5 24 5z" />
+            <path d="M18 30 30 18" />
+            <path d="M21 18h9v9" />
+          </svg>
+          <h3 class="mt-6 font-display text-2xl font-bold text-ink">acts, not chats</h3>
+          <p class="mt-3 text-justify text-sm leading-relaxed text-neutral-600">
+            bloop does not just answer. it books, files, sends, and fixes — carrying a task to done inside your real
+            apps while you get on with your day.
+          </p>
+        </article>
+
+        <!-- card: plugs into your apps -->
+        <article
+          data-reveal
+          class="bg-white p-8 opacity-0 transition-[transform,background-color] duration-200 ease-out [animation-delay:75ms] motion-safe:hover:-translate-y-1 motion-reduce:transition-[background-color] hover:bg-[#F2F2F2]"
+        >
+          <svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-12 w-12 text-olive" aria-hidden="true">
+            <path d="M24 5c9 0 17 6 17 15 0 9-4 14-10 17-6 3-13 3-17-1-4-4-6-11-4-17C12 12 16 5 24 5z" />
+            <rect x="14" y="19" width="7" height="7" />
+            <rect x="27" y="14" width="7" height="7" />
+            <rect x="25" y="28" width="7" height="7" />
+            <path d="M21 23h4M28 21l-2 5" />
+          </svg>
+          <h3 class="mt-6 font-display text-2xl font-bold text-ink">plugs into your apps</h3>
+          <p class="mt-3 text-justify text-sm leading-relaxed text-neutral-600">
+            mail, calendar, docs, tickets, the weird internal tool. bloop reaches them all through connectors, apis,
+            and a very patient little browser.
+          </p>
+        </article>
+
+        <!-- card: proves every step -->
+        <article
+          data-reveal
+          class="bg-white p-8 opacity-0 transition-[transform,background-color] duration-200 ease-out [animation-delay:150ms] motion-safe:hover:-translate-y-1 motion-reduce:transition-[background-color] hover:bg-[#F2F2F2] sm:col-span-2 lg:col-span-1"
+        >
+          <svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-12 w-12 text-olive" aria-hidden="true">
+            <path d="M24 5c9 0 17 6 17 15 0 9-4 14-10 17-6 3-13 3-17-1-4-4-6-11-4-17C12 12 16 5 24 5z" />
+            <path d="M17 24l5 5 10-11" />
+          </svg>
+          <h3 class="mt-6 font-display text-2xl font-bold text-ink">proves every step</h3>
+          <p class="mt-3 text-justify text-sm leading-relaxed text-neutral-600">
+            every action is logged and every write is verified by replay, so nothing silently half-happens. receipts,
+            not vibes.
+          </p>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 4. split showcase — photo / solid panel ============ -->
+  <section class="grid lg:grid-cols-2" aria-label="how bloop works">
+    <div class="relative h-[60vh] overflow-hidden lg:h-auto lg:min-h-[42rem]">
+      <img
+        src="assets/tree.jpg"
+        alt="a tall tree smeared into vertical motion blur against a blue sky"
+        class="absolute inset-0 h-full w-full scale-[1.03] object-cover motion-safe:animate-panel-zoom motion-safe:[animation-timeline:view()]"
+      />
+    </div>
+    <div class="relative flex items-center overflow-hidden bg-olive px-6 py-20 sm:px-10 lg:px-16">
+      <div aria-hidden="true" class="pointer-events-none absolute -bottom-44 -left-44 grid h-[34rem] w-[34rem] place-items-center">
+        <div class="absolute h-[34rem] w-[34rem] rounded-full border border-white/20"></div>
+        <div class="absolute h-[24rem] w-[24rem] rounded-full border border-white/20"></div>
+        <div class="absolute h-[14rem] w-[14rem] rounded-full border border-white/20"></div>
+      </div>
+      <div data-reveal class="relative max-w-md opacity-0">
+        <p class="text-xs font-semibold tracking-[0.2em] text-white/70">how it works</p>
+        <h2 class="mt-3 font-display text-4xl font-extrabold text-white sm:text-5xl">
+          you ask once. bloop does the rounds.
+        </h2>
+        <p class="mt-6 text-justify text-base leading-relaxed text-white">
+          drop a goal in plain words. bloop opens the right apps, taps the right buttons, and comes back with the
+          finished thing — plus a tidy log of everything it touched.
+        </p>
+        <a
+          href="#access"
+          class="mt-8 inline-flex items-center rounded-full bg-white px-7 py-3.5 font-display font-bold text-olive transition-[transform,background-color,color] duration-200 ease-out hover:bg-bloop hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-olive motion-safe:hover:-translate-y-0.5 motion-reduce:transition-[background-color,color]"
+          >see it work</a
+        >
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 5. numbers band — oversized numerals on white ============ -->
+  <section id="numbers" class="bg-white px-6 py-24 sm:px-10 lg:px-20 lg:py-32" aria-label="numbers">
+    <div class="mx-auto grid max-w-6xl gap-12 sm:grid-cols-3 sm:gap-8">
+      <div data-reveal class="opacity-0">
+        <p class="font-display text-7xl font-extrabold leading-none text-olive sm:text-8xl">
+          <span data-count="1000" data-suffix="+">0+</span>
+        </p>
+        <div class="mt-4 h-1 w-10 bg-bloop" aria-hidden="true"></div>
+        <p class="mt-4 text-justify text-sm leading-relaxed text-neutral-600">
+          apps reachable through connectors, apis, and one very determined little browser session.
+        </p>
+      </div>
+      <div data-reveal class="opacity-0 [animation-delay:75ms]">
+        <p class="font-display text-7xl font-extrabold leading-none text-olive sm:text-8xl">
+          <span data-count="100" data-suffix="%">0%</span>
+        </p>
+        <div class="mt-4 h-1 w-10 bg-bloop" aria-hidden="true"></div>
+        <p class="mt-4 text-justify text-sm leading-relaxed text-neutral-600">
+          of writes verified by replay before bloop calls a task done. no silent half-actions, ever.
+        </p>
+      </div>
+      <div data-reveal class="opacity-0 [animation-delay:150ms]">
+        <p class="font-display text-7xl font-extrabold leading-none text-olive sm:text-8xl">
+          <span data-count="1" data-suffix="">0</span>
+        </p>
+        <div class="mt-4 h-1 w-10 bg-bloop" aria-hidden="true"></div>
+        <p class="mt-4 text-justify text-sm leading-relaxed text-neutral-600">
+          blob. it does not multiply, it does not swarm, it does not need to.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 6. cta — full-bleed photo, green overlay, email capture ============ -->
+  <section id="access" class="relative overflow-hidden px-6 py-28 sm:px-10 sm:py-36" aria-label="get access">
+    <img src="assets/cta-bg.jpg" alt="" aria-hidden="true" class="absolute inset-0 h-full w-full object-cover" />
+    <div class="absolute inset-0 bg-olive/85" aria-hidden="true"></div>
+
+    <div data-reveal class="relative mx-auto max-w-3xl text-center opacity-0">
+      <h2
+        class="font-display text-5xl font-extrabold leading-[0.95] text-white [-webkit-text-stroke:0.03em_#8DC63F] [paint-order:stroke_fill] sm:text-7xl"
+      >
+        bring a blob to work
+      </h2>
+      <p class="mx-auto mt-6 max-w-md text-balance text-base text-white">
+        one email. early access. no deck, no demo call, no fourteen-page onboarding doc.
+      </p>
+      <form action="#" method="get" class="mx-auto mt-10 flex max-w-md flex-col gap-3 sm:flex-row">
+        <label for="email" class="sr-only">email address</label>
+        <input
+          id="email"
+          name="email"
+          type="email"
+          required
+          placeholder="you@work.com"
+          class="w-full flex-1 bg-white px-5 py-4 text-sm text-ink placeholder:text-neutral-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bloop focus-visible:ring-offset-2 focus-visible:ring-offset-olive"
+        />
+        <button
+          type="submit"
+          class="rounded-full bg-bloop px-8 py-4 font-display font-bold text-ink transition-[transform,background-color] duration-200 ease-out hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-olive motion-safe:hover:-translate-y-0.5 motion-reduce:transition-[background-color]"
+        >
+          join up
+        </button>
+      </form>
+    </div>
+  </section>
+
+  <!-- ============ 7. footer — deep olive ============ -->
+  <footer class="bg-olive px-6 py-12 sm:px-10">
+    <div class="mx-auto flex max-w-6xl flex-col items-start justify-between gap-8 sm:flex-row sm:items-center">
+      <a
+        href="#top"
+        class="flex items-center gap-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
+      >
+        <img src="assets/logo-blob.png" alt="bloop logo" class="h-8 w-8" />
+        <span class="font-display text-lg font-extrabold text-white">bloop</span>
+      </a>
+      <nav aria-label="footer">
+        <ul class="flex flex-wrap gap-x-6 gap-y-2 text-sm text-white/80">
+          <li><a href="#features" class="hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white">features</a></li>
+          <li><a href="#numbers" class="hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white">numbers</a></li>
+          <li><a href="#access" class="hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white">access</a></li>
+          <li><a href="mailto:hi@bloop.do" class="hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white">contact</a></li>
+        </ul>
+      </nav>
+      <p class="text-xs text-white/60">© 2025 bloop. one blob, zero chill.</p>
+    </div>
+  </footer>
+
+  <!-- reveal-on-scroll observer + count-up (the only js on the page) -->
+  <script>
+    const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const setCount = (n, v) => { n.textContent = Math.round(v) + n.dataset.suffix; };
+    const run = (el) => {
+      el.classList.add('animate-reveal');
+      const n = el.querySelector('[data-count]');
+      if (!n || n.dataset.done) return;
+      n.dataset.done = '1';
+      if (reduce) { setCount(n, +n.dataset.count); return; }
+      const target = +n.dataset.count, t0 = performance.now();
+      requestAnimationFrame(function tick(t) {
+        const p = Math.min((t - t0) / 900, 1);
+        setCount(n, target * (p * (2 - p)));
+        if (p < 1) requestAnimationFrame(tick);
+      });
+    };
+    const io = new IntersectionObserver((entries) => {
+      entries.forEach((e) => {
+        if (!e.isIntersecting) return;
+        if (reduce) e.target.style.opacity = '1'; else run(e.target);
+        if (reduce) { const n = e.target.querySelector('[data-count]'); if (n) setCount(n, +n.dataset.count); }
+        io.unobserve(e.target);
+      });
+    }, { threshold: 0.3 });
+    document.querySelectorAll('[data-reveal]').forEach((el) => io.observe(el));
+  </script>
+</body>
+</html>

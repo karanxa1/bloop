@@ -69,6 +69,14 @@ export interface ToolCallEvent {
   parent?: string;
 }
 
+export type ToolErrorKind =
+  | "timeout"
+  | "transient"
+  | "auth"
+  | "circuit_open"
+  | "invalid_args"
+  | "error";
+
 export interface ToolResultEvent {
   id: string;
   name?: string;
@@ -77,6 +85,26 @@ export interface ToolResultEvent {
   ms: number;
   output: string;
   parent?: string;
+  error_kind?: ToolErrorKind;
+  retries?: number;
+}
+
+export interface ThinkingEvent {
+  text: string;
+}
+
+export interface SkillEvent {
+  action: "use" | "create" | "update";
+  name: string;
+}
+
+/** MCP Apps view attached to a tool call (`id` = tool call id) */
+export interface McpAppEvent {
+  id: string;
+  server: string;
+  tool: string;
+  uri: string;
+  url: string;
 }
 
 export interface ModeEvent {
@@ -201,6 +229,10 @@ export interface ToolCall {
   startedAt?: number;
   /** position within a burst of parallel calls — drives the entry stagger */
   stagger?: number;
+  /** classified failure reason from the backend's resilient tool runner */
+  errorKind?: ToolErrorKind;
+  /** how many times the backend retried before this result */
+  retries?: number;
 }
 
 export interface Subagent {
@@ -233,7 +265,15 @@ export type MessagePart =
       ok?: boolean;
     }
   | { kind: "handoff"; id: string; url: string; reason: string; sessionId?: string }
-  | { kind: "subagent"; id: string }; // id matches a Subagent id
+  | { kind: "subagent"; id: string } // id matches a Subagent id
+  /** streamed reasoning summary */
+  | { kind: "thinking"; id: string; text: string }
+  /** skill used / created / updated during the run */
+  | { kind: "skill"; id: string; action: SkillEvent["action"]; name: string }
+  /** MCP Apps view — `id` matches the ToolCall id that produced it */
+  | { kind: "mcp_app"; id: string; server: string; tool: string; uri: string; url: string }
+  /** file uploaded to the conversation workspace (user turns); `url` = raw preview */
+  | { kind: "attachment"; id: string; path: string; mime: string; bytes: number; url?: string };
 
 export interface ChatMessage {
   id: string;
@@ -274,7 +314,11 @@ export type TraceItem =
       task: string;
       ok?: boolean;
       summary?: string;
-    };
+    }
+  /** an MCP server that errored or tripped its circuit breaker mid-run */
+  | { kind: "server"; seq: number; name: string; state: string }
+  | { kind: "skill"; seq: number; action: "use" | "create" | "update"; name: string }
+  | { kind: "mcp_app"; seq: number; id: string; server: string; tool: string; url: string };
 
 // mutating tool names — a result from one of these without a matching
 // verify event counts as an "unverified write"

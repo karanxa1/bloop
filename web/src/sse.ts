@@ -82,6 +82,8 @@ export interface ChatRequestBody {
   message: string;
   model: string;
   mode: "default" | "think" | "deep";
+  /** workspace uploads (paths from POST /api/workspace/:conv/upload) */
+  attachments?: { path: string; mime: string; bytes: number }[];
 }
 
 /** POST /api/chat and dispatch each SSE event to onEvent. Resolves on stream end. */

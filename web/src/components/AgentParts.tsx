@@ -1,6 +1,16 @@
-import { memo, useContext, useId, useMemo, useState } from "react";
+import {
+  memo,
+  useContext,
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState
+} from "react";
+import type { MouseEvent as ReactMouseEvent, ReactNode } from "react";
 import type { McpServerFrame, SourceItem, Subagent, ToolCall } from "../types";
-import { ChatActions } from "../chatActions";
+import { ChatActions, MessageSources } from "../chatActions";
 import {
   AgentIcon,
   CheckIcon,
@@ -260,14 +270,40 @@ export const SubagentCard = memo(function SubagentCard({
 
 const VISIBLE_SOURCES = 6;
 
-export function SourceChip({ item }: { item: SourceItem }) {
+export function SourceChip({
+  item,
+  index,
+  total
+}: {
+  item: SourceItem;
+  index?: number;
+  total?: number;
+}) {
   const host = hostOf(item.url);
+  return (
+    <SourceHover item={item} index={index} total={total}>
+      {(trigger) => (
+        <SourceChipLink item={item} host={host} trigger={trigger} />
+      )}
+    </SourceHover>
+  );
+}
+
+function SourceChipLink({
+  item,
+  host,
+  trigger
+}: {
+  item: SourceItem;
+  host: string;
+  trigger: { "aria-describedby"?: string; onClick: (e: ReactMouseEvent) => void };
+}) {
   return (
     <a
       href={item.url}
       target="_blank"
-      rel="noopener noreferrer"
-      title={item.title ? `${item.title} — ${host}` : item.url}
+      rel="noopener noreferrer nofollow"
+      {...trigger}
       className="inline-flex max-w-[14rem] items-center gap-1.5 rounded-full border border-neutral-200 bg-white py-1 pl-1 pr-2.5 text-[11px] font-medium text-neutral-600 transition-colors duration-150 hover:border-bloop hover:text-bloop-deep focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-bloop-deep"
     >
       <img
@@ -370,9 +406,180 @@ export function ServerChips({ servers }: { servers: McpServerFrame[] }) {
 
 // ── thinking indicator ──────────────────────────────────────────────
 
+// ── skill chip ──────────────────────────────────────────────────────
+
+export function SkillChip({
+  action,
+  name
+}: {
+  action: "use" | "create" | "update";
+  name: string;
+}) {
+  const verb =
+    action === "create" ? "created skill" : action === "update" ? "updated skill" : "used skill";
+  return (
+    <span className="motion-safe:tool-in inline-flex max-w-full items-center gap-1.5 rounded-full border border-bloop/40 bg-bloop/10 py-0.5 pl-2 pr-2.5 text-[11px] text-neutral-600">
+      <svg className="h-3 w-3 shrink-0 text-bloop-deep" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <path d="M4 19.5V5a2 2 0 0 1 2-2h14v16H6.5A2.5 2.5 0 0 0 4 21.5v-2Z" />
+      </svg>
+      <span className="shrink-0">{verb}</span>
+      <span aria-hidden="true" className="text-neutral-400">·</span>
+      <span className="truncate font-semibold text-bloop-deep">{name}</span>
+    </span>
+  );
+}
+
+// ── source hover card + inline citation ─────────────────────────────
+
+/** hover/focus card: 300ms open delay, 100ms close grace, Esc closes, tap opens on touch */
+function SourceHover({
+  item,
+  index,
+  total,
+  children
+}: {
+  item: SourceItem;
+  index?: number;
+  total?: number;
+  children: (trigger: {
+    "aria-describedby"?: string;
+    onClick: (e: React.MouseEvent) => void;
+  }) => ReactNode;
+}) {
+  const [open, setOpen] = useState(false);
+  const [shift, setShift] = useState(0);
+  const openT = useRef<number | undefined>(undefined);
+  const closeT = useRef<number | undefined>(undefined);
+  const cardRef = useRef<HTMLSpanElement>(null);
+  const cardId = useId();
+  const host = hostOf(item.url);
+
+  useEffect(
+    () => () => {
+      window.clearTimeout(openT.current);
+      window.clearTimeout(closeT.current);
+    },
+    []
+  );
+
+  // keep the card inside the viewport horizontally
+  useLayoutEffect(() => {
+    if (!open) {
+      setShift(0);
+      return;
+    }
+    const r = cardRef.current?.getBoundingClientRect();
+    if (!r) return;
+    const over = r.right - (window.innerWidth - 12);
+    if (over > 0) setShift(-Math.min(over, Math.max(0, r.left - 12)));
+  }, [open]);
+
+  const show = (delay: number) => {
+    window.clearTimeout(closeT.current);
+    window.clearTimeout(openT.current);
+    openT.current = window.setTimeout(() => setOpen(true), delay);
+  };
+  const hide = () => {
+    window.clearTimeout(openT.current);
+    closeT.current = window.setTimeout(() => setOpen(false), 100);
+  };
+
+  return (
+    <span
+      className="relative inline-block max-w-full align-baseline"
+      onMouseEnter={() => show(300)}
+      onMouseLeave={hide}
+      onFocus={() => show(0)}
+      onBlur={hide}
+      onKeyDown={(e) => {
+        if (e.key === "Escape" && open) {
+          e.stopPropagation();
+          setOpen(false);
+        }
+      }}
+    >
+      {children({
+        "aria-describedby": open ? cardId : undefined,
+        onClick: (e) => {
+          // touch: first tap previews, second tap follows the link
+          if (!open && window.matchMedia("(hover: none)").matches) {
+            e.preventDefault();
+            setOpen(true);
+          }
+        }
+      })}
+      {open && (
+        <span
+          ref={cardRef}
+          id={cardId}
+          role="tooltip"
+          style={{ transform: shift ? `translateX(${shift}px)` : undefined }}
+          className="motion-safe:tool-in absolute left-0 top-full z-30 mt-1.5 block w-[min(320px,calc(100vw-2rem))] border border-neutral-200 border-l-2 border-l-bloop bg-white p-3 text-left not-italic shadow-md"
+        >
+          <span className="flex items-center gap-1.5 text-[11px] text-neutral-500">
+            <img
+              src={faviconUrl(host)}
+              alt=""
+              width={14}
+              height={14}
+              loading="lazy"
+              referrerPolicy="no-referrer"
+              onError={(e) => {
+                e.currentTarget.style.visibility = "hidden";
+              }}
+              className="h-3.5 w-3.5 shrink-0 rounded-full bg-page"
+            />
+            <span className="min-w-0 flex-1 truncate">{host}</span>
+            {index != null && total != null && total > 1 && (
+              <span className="tabular-nums text-neutral-400">
+                {index}/{total}
+              </span>
+            )}
+          </span>
+          <a
+            href={item.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="mt-1 line-clamp-2 block text-[13px] font-semibold leading-snug text-neutral-800 no-underline! hover:text-bloop-deep! focus-visible:outline-2 focus-visible:outline-bloop-deep"
+          >
+            {item.title || item.url}
+          </a>
+          <span className="mt-1 block truncate font-mono text-[10px] normal-case text-neutral-400">
+            {item.url}
+          </span>
+        </span>
+      )}
+    </span>
+  );
+}
+
+/** inline `[n]` citation → domain pill with a hover card */
+export function Cite({ n }: { n: number }) {
+  const sources = useContext(MessageSources);
+  const item = sources?.[n - 1];
+  if (!item) return <span className="text-neutral-400">[{n}]</span>;
+  const host = hostOf(item.url).replace(/^www\./, "");
+  return (
+    <SourceHover item={item} index={n} total={sources!.length}>
+      {(trigger) => (
+        <a
+          href={item.url}
+          target="_blank"
+          rel="noopener noreferrer"
+          {...trigger}
+          className="mx-0.5 inline-flex h-[18px] max-w-[10rem] translate-y-[-1px] items-center rounded-full bg-bloop/15 px-1.5 align-middle text-[10px] font-semibold leading-none text-bloop-deep! no-underline! transition-colors duration-150 hover:bg-bloop/30 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-bloop-deep"
+        >
+          <span className="truncate">{host}</span>
+          <span className="sr-only"> (source {n})</span>
+        </a>
+      )}
+    </SourceHover>
+  );
+}
+
 export function ThinkingIndicator({ label }: { label: string }) {
   return (
-    <div className="mb-4 flex items-center gap-2.5" role="status">
+    <div className="mb-4 flex items-center gap-2.5">
       <span className="flex h-4 items-end gap-1" aria-hidden="true">
         {[0, 1, 2].map((i) => (
           <span

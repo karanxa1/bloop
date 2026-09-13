@@ -10,6 +10,9 @@ import http from "node:http";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
+import { workspaceRoute, workspaceChatDemo } from "./workspace.mjs";
+import { handleChatA, streamStepsDemo, wantsStepsDemo } from "./chat-a.mjs";
+import "./marketplace.mjs"; // skills · tools · servers routes (hooks requests before this router)
 
 const PORT = Number(process.env.PORT ?? 8787);
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
@@ -99,6 +102,7 @@ async function streamChat(req, res, body, user) {
     "cache-control": "no-cache",
     connection: "keep-alive"
   });
+  if (wantsStepsDemo(message)) return streamStepsDemo(res, body, convo);
 
   const lower = message.toLowerCase();
   const wantsImage = /image|picture|draw|paint|blob/.test(lower);
@@ -206,6 +210,8 @@ async function streamChat(req, res, body, user) {
     await sleep(300);
   }
 
+  await workspaceChatDemo(res, body.conversation_id, message);
+
   if (wantsImage) {
     sse(res, "image", { url: "/files/demo-image", prompt: message.slice(0, 80) });
     await sleep(300);
@@ -269,6 +275,7 @@ const server = http.createServer(async (req, res) => {
   const method = req.method;
 
   try {
+    if (await handleChatA(req, res, path, method)) return;
     if (path === "/api/health") {
       return send(res, 200, { ok: true, model: "gpt-5.6-sol", servers });
     }
@@ -313,6 +320,7 @@ const server = http.createServer(async (req, res) => {
     // everything below requires auth
     const u = authedUser(req);
     if (!u) return send(res, 401, { error: "not signed in" });
+    if (await workspaceRoute(req, res, path, method, url)) return;
 
     // ── conversations ──
     if (path === "/api/conversations" && method === "GET") {

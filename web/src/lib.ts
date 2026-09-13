@@ -92,3 +92,18 @@ export function relTime(iso: string | undefined): string {
     day: "numeric"
   });
 }
+
+/**
+ * Same-origin `/files/…` path or null. Rejects protocol-relative (`//evil.com`),
+ * absolute cross-origin, `javascript:` and anything outside /files/.
+ */
+export function sameOriginPath(raw: unknown): string | null {
+  if (typeof raw !== "string" || typeof window === "undefined") return null;
+  try {
+    const u = new URL(raw, window.location.origin);
+    if (u.origin !== window.location.origin || !u.pathname.startsWith("/files/")) return null;
+    return u.pathname + u.search;
+  } catch {
+    return null;
+  }
+}

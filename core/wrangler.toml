@@ -1,0 +1,15 @@
+name = "bloop"
+main = "build/worker/shim.mjs"
+compatibility_date = "2026-05-01"
+
+build.command = "cargo install -q worker-build && worker-build --release"
+
+[assets]
+directory = "../web/dist"
+binding = "ASSETS"
+
+[vars]
+AZURE_OPENAI_ENDPOINT = "https://callmissed-resource.cognitiveservices.azure.com"
+AZURE_OPENAI_API_VERSION = "2025-04-01-preview"
+AGENT_MODEL = "gpt-5.6-terra"
+AGENT_MODEL_FALLBACK = "gpt-5.5"

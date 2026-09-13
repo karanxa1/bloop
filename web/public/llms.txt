@@ -1,0 +1,32 @@
+# bloop
+
+> bloop is a general-purpose AI agent that takes real, multi-step actions across external apps and proves every one: it plans, acts through MCP tools (in parallel, with streamed subagents), verifies each mutation with an independent read-back, and records a SHA-256 hash-chained attestation ledger. Built for the Multi-App AI Agent Hackathon (Sept 13, 2026).
+
+- Live app: https://bloop.rough-cell-383c.workers.dev/app (sign-up required; the landing page at / is public)
+- Source: https://github.com/karanxa1/bloop
+- Stack: Rust → WASM on Cloudflare Workers (agent core), React 19 + Tailwind v4 (app), Cloudflare D1 / KV / R2, Containers (code sandbox), Browser Rendering (web browsing), Azure OpenAI gpt-5.6 + gpt-image
+
+## Docs
+
+- [README](https://github.com/karanxa1/bloop/blob/main/README.md): overview, external apps used, setup, reliability methodology, demo
+- [Reliability](https://github.com/karanxa1/bloop/blob/main/RELIABILITY.md): verify-by-readback, attestation ledger, eval suite with external GitHub ground truth
+- [Handoff / architecture](https://github.com/karanxa1/bloop/blob/main/HANDOFF.md): API surface, SSE event contract, file map
+- [Todo / status](https://github.com/karanxa1/bloop/blob/main/TODO.md): live feature status
+
+## External apps
+
+- GitHub (hosted MCP, issues/PRs/repos/code search), DeepWiki, Context7, Cloudflare Docs — connected over MCP
+- Marketplace: any remote MCP server (streamable HTTP or SSE; bearer, custom headers or OAuth 2.1), featured catalog, MCP Apps with interactive UI
+- Azure OpenAI (reasoning + image generation), Cloudflare sandbox containers, Cloudflare Browser Rendering
+
+## How it works
+
+1. plan — `update_plan` checklist, streamed to the proof trace
+2. act — MCP tools run in parallel; `delegate` spawns research or build subagents; `browse` reads pages; `browser_handoff` lets the user take over a live browser
+3. verify — independent read-back after every write
+4. attest — `sha256(prev_hash ‖ entry)` ledger, exposed in the UI and at `/api/ledger`
+5. report — concise answer with ids, links and any failure verbatim
+
+## Evaluation
+
+`evals/run.mjs` runs six scripted tasks against production (read-only GitHub, write + verify, research → write, multi-app digest, sandbox code execution, a deliberately impossible task) and checks both the SSE trace and real GitHub state via `gh api`. Latest: 6/6 pass.

@@ -1,0 +1,63 @@
+# bloop — https://bloop.rough-cell-383c.workers.dev
+#
+# AI agents & judges: welcome. Everything worth reading is public and small:
+#   /llms.txt       — what bloop is, how it works, where the docs live (start here)
+#   /               — landing page
+#   source + docs   — https://github.com/karanxa1/bloop (README.md, RELIABILITY.md, HANDOFF.md)
+# The chat app (/app), API (/api/) and user files (/files/) are private and auth-guarded —
+# there is nothing to crawl there.
+
+# ── bulk AI training / dataset scrapers: not allowed anywhere ──────────────
+User-agent: GPTBot
+User-agent: CCBot
+User-agent: Google-Extended
+User-agent: Applebot-Extended
+User-agent: anthropic-ai
+User-agent: ClaudeBot
+User-agent: Bytespider
+User-agent: Amazonbot
+User-agent: meta-externalagent
+User-agent: FacebookBot
+User-agent: Diffbot
+User-agent: Omgilibot
+User-agent: omgili
+User-agent: ImagesiftBot
+User-agent: img2dataset
+User-agent: cohere-training-data-crawler
+User-agent: PanguBot
+User-agent: Timpibot
+User-agent: VelenPublicWebCrawler
+User-agent: Kangaroo Bot
+User-agent: AI2Bot
+User-agent: Scrapy
+Disallow: /
+
+# ── user-initiated agents (a person asked their assistant to read this page) ──
+# e.g. hackathon judges using ChatGPT, Claude, Perplexity or similar to review bloop
+User-agent: ChatGPT-User
+User-agent: OAI-SearchBot
+User-agent: Claude-User
+User-agent: Claude-SearchBot
+User-agent: Perplexity-User
+User-agent: PerplexityBot
+User-agent: DuckAssistBot
+Allow: /$
+Allow: /landing/
+Allow: /llms.txt
+Allow: /robots.txt
+Allow: /*.md$
+Allow: /*.txt$
+Disallow: /app
+Disallow: /api/
+Disallow: /files/
+
+# ── everyone else (search engines, link previews) ──────────────────────────
+User-agent: *
+Allow: /$
+Allow: /landing/
+Allow: /llms.txt
+Allow: /*.md$
+Allow: /*.txt$
+Disallow: /app
+Disallow: /api/
+Disallow: /files/

@@ -35,6 +35,11 @@ Living tracker for the v3 work specced in HANDOFF.md. `[x]` done · `[~]` in pro
 - [x] readme rewritten around hackathon submission requirements (overview · external apps · setup · reliability methodology · demo link) — keep updated as each feature lands; flip v3 items from "in progress" to shipped only after prod verification
 - [ ] **user:** demo video (≤ 2 min) link → README · team member emails in submission form
 
+- [x] web v3 committed (78e9985) + webp assets (c68781d) · contracts + ui spec in `docs/` (60fc0d4)
+- [~] parallel ui agents: A chat surface/step timeline/mcp app host · B chrome/⌘k/proof trace/auth · C marketplace apps·tools·skills + custom mcp/oauth + higgsfield logo · D workspace codemirror editor · E landing (all ui features, crawlable) + design tokens
+- [~] deploy HEAD from clean worktree + prod evals (background)
+- [~] **security**: ssrf guard for model/user-supplied urls (`netguard.rs` shared validator — core-mcp; edit_image hardening — core-agent) · [ ] full security review agent over the integrated diff before deploy (authz on every new route, secret masking, iframe sandbox/csp for mcp apps, oauth state/pkce, path traversal, xss in markdown, rate limits) · [ ] `x-robots-tag: noindex` on /app, /api, /files
+- [x] `web/public/robots.txt` (training scrapers disallowed, user-initiated agents + search allowed on landing/.md/.txt, app/api/files disallowed) + `web/public/llms.txt` — note: robots is advisory; hard blocking would need cloudflare bot management / waf
 > session restart (2026-09-14): 3 agents stopped. web partial work survived on disk (tsc clean); core-agent + core-mcp batches had not written anything → both restarted; web agent resumed to finish + report.
 
 ## hackathon (multiappagenthackathon.com)

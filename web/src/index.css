@@ -1,0 +1,132 @@
+@import "tailwindcss";
+
+@theme {
+  --color-bloop: #8dc63f;
+  --color-bloop-deep: #5c8a2c;
+  --color-page: #f2f2f2;
+  --font-wordmark: "Baloo 2", ui-rounded, system-ui, sans-serif;
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  background-color: var(--color-page);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── markdown body ─────────────────────────────────────────────── */
+.md {
+  font-size: 0.925rem;
+  line-height: 1.6;
+  color: var(--color-neutral-800);
+  word-break: break-word;
+}
+.md > *:first-child {
+  margin-top: 0;
+}
+.md > *:last-child {
+  margin-bottom: 0;
+}
+.md p {
+  margin: 0.5rem 0;
+}
+.md h1,
+.md h2,
+.md h3,
+.md h4 {
+  font-weight: 700;
+  color: var(--color-bloop-deep);
+  margin: 0.9rem 0 0.35rem;
+  line-height: 1.3;
+}
+.md h1 {
+  font-size: 1.15rem;
+}
+.md h2 {
+  font-size: 1.05rem;
+}
+.md h3,
+.md h4 {
+  font-size: 0.95rem;
+}
+.md ul,
+.md ol {
+  margin: 0.5rem 0;
+  padding-left: 1.35rem;
+}
+.md ul {
+  list-style: disc;
+}
+.md ol {
+  list-style: decimal;
+}
+.md li {
+  margin: 0.2rem 0;
+}
+.md a {
+  color: var(--color-bloop-deep);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.md a:hover {
+  color: var(--color-bloop);
+}
+.md code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.82em;
+  background: var(--color-neutral-100);
+  border: 1px solid var(--color-neutral-200);
+  border-radius: 0.25rem;
+  padding: 0.1rem 0.3rem;
+}
+.md pre {
+  margin: 0.6rem 0;
+  padding: 0.7rem 0.9rem;
+  background: var(--color-neutral-900);
+  border-radius: 0.5rem;
+  overflow-x: auto;
+}
+.md pre code {
+  background: transparent;
+  border: none;
+  padding: 0;
+  color: var(--color-neutral-100);
+  font-size: 0.8rem;
+}
+.md blockquote {
+  margin: 0.6rem 0;
+  padding-left: 0.8rem;
+  border-left: 3px solid var(--color-bloop);
+  color: var(--color-neutral-600);
+}
+.md table {
+  margin: 0.6rem 0;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+.md th,
+.md td {
+  border: 1px solid var(--color-neutral-300);
+  padding: 0.3rem 0.6rem;
+  text-align: left;
+}
+.md th {
+  background: var(--color-neutral-100);
+  font-weight: 600;
+}
+.md hr {
+  margin: 0.8rem 0;
+  border-color: var(--color-neutral-200);
+}
+
+/* thin scrollbars */
+.scroll-thin {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-neutral-300) transparent;
+}

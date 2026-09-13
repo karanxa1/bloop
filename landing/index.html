@@ -60,7 +60,11 @@
   <!-- ============ 1. hero — full-bleed photo, sticker wordmark, lime cta ============ -->
   <header id="top" class="relative flex h-screen min-h-[38rem] flex-col overflow-hidden">
     <img
-      src="/landing/assets/hero.jpg"
+      src="/landing/assets/hero.webp"
+      width="1536"
+      height="1024"
+      fetchpriority="high"
+      decoding="async"
       alt="motion-blurred green tree canopy streaking past a bright blue sky"
       class="absolute inset-0 h-full w-full object-cover"
     />
@@ -70,7 +74,7 @@
         href="#top"
         class="flex items-center gap-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-olive"
       >
-        <img src="/landing/assets/logo-blob.png" alt="bloop logo — a small white rounded blob" class="h-9 w-9" />
+        <img src="/landing/assets/logo-blob.webp" width="1024" height="1024" decoding="async" alt="bloop logo — a small white rounded blob" class="h-9 w-9" />
         <span class="font-display text-xl font-extrabold text-white [text-shadow:0_1px_10px_rgb(0_0_0/0.4)]">bloop</span>
       </a>
       <ul class="hidden items-center gap-8 text-sm font-medium text-white [text-shadow:0_1px_8px_rgb(0_0_0/0.4)] sm:flex">
@@ -132,7 +136,11 @@
     <!-- ============ photo panel — scrolls over the sticky band ============ -->
     <section class="relative h-[80vh] overflow-hidden" aria-label="underwater light">
       <img
-        src="/landing/assets/underwater.jpg"
+        src="/landing/assets/underwater.webp"
+        width="1536"
+        height="1024"
+        loading="lazy"
+        decoding="async"
         alt="sunlight rays bending through green-tinted water, smeared with motion blur"
         class="h-full w-full scale-[1.03] object-cover motion-safe:animate-panel-zoom motion-safe:[animation-timeline:view()]"
       />
@@ -261,7 +269,11 @@
   <section class="grid lg:grid-cols-2" aria-label="how bloop works">
     <div class="relative h-[60vh] overflow-hidden lg:h-auto lg:min-h-[42rem]">
       <img
-        src="/landing/assets/tree.jpg"
+        src="/landing/assets/tree.webp"
+        width="1024"
+        height="1536"
+        loading="lazy"
+        decoding="async"
         alt="a tall tree smeared into vertical motion blur against a blue sky"
         class="absolute inset-0 h-full w-full scale-[1.03] object-cover motion-safe:animate-panel-zoom motion-safe:[animation-timeline:view()]"
       />
@@ -325,7 +337,7 @@
 
   <!-- ============ 6. cta — full-bleed photo, green overlay, email capture ============ -->
   <section id="access" class="relative overflow-hidden px-6 py-28 sm:px-10 sm:py-36" aria-label="get access">
-    <img src="/landing/assets/cta-bg.jpg" alt="" aria-hidden="true" class="absolute inset-0 h-full w-full object-cover" />
+    <img src="/landing/assets/cta-bg.webp" width="1536" height="1024" loading="lazy" decoding="async" alt="" aria-hidden="true" class="absolute inset-0 h-full w-full object-cover" />
     <div class="absolute inset-0 bg-olive/85" aria-hidden="true"></div>
 
     <div data-reveal class="relative mx-auto max-w-3xl text-center opacity-0">
@@ -372,7 +384,7 @@
         href="#top"
         class="flex items-center gap-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
       >
-        <img src="/landing/assets/logo-blob.png" alt="bloop logo" class="h-8 w-8" />
+        <img src="/landing/assets/logo-blob.webp" width="1024" height="1024" decoding="async" alt="bloop logo" class="h-8 w-8" />
         <span class="font-display text-lg font-extrabold text-white">bloop</span>
       </a>
       <nav aria-label="footer">

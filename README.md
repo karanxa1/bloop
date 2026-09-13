@@ -1,91 +1,144 @@
 # bloop — tiny blob. big brain.
 
-A general-purpose AI agent that takes **real, verified, multi-step actions across external apps** — and proves every one of them.
+> **An AI agent that doesn't just say it did something — it proves it.**
 
-Built for the [Multi-App AI Agent Hackathon](https://multiappagenthackathon.com/) (Sept 13, 2026): *"build one useful, multi-step AI agent, connected to at least three external apps."*
+bloop is a general-purpose agent that plans, takes real actions across your apps,
+**verifies every mutation with an independent read-back**, and records a
+tamper-evident, hash-chained proof trace you can audit afterwards.
+
+Built for the [Multi-App AI Agent Hackathon](https://multiappagenthackathon.com/):
+*"build one useful, multi-step AI agent, connected to at least three external apps."*
+bloop connects to **any MCP server ever published** — and ships with 15+ wired in.
 
 | | |
 |---|---|
 | **Live app** | https://bloop.rough-cell-383c.workers.dev (landing) · [`/app`](https://bloop.rough-cell-383c.workers.dev/app) (agent) |
-| **Demo video** | [watch on Loom](https://www.loom.com/share/fdcc943af2e24d599e647a1b5735f784) |
-| **Evals** | **6/6 pass** against production (`evals/report-*.md`) |
+| **Demo video** | [watch on Loom](https://www.loom.com/share/fdcc943af2e24d599e647a1b5735f784) (~2 min) |
+| **Evals** | **6/6 pass** against production — verified against real GitHub state (`evals/report-*.md`) |
+| **Repo** | https://github.com/karanxa1/bloop |
 
 ---
 
-## Overview
+## Why bloop is different
 
-You give bloop a goal in plain language. It plans, acts on live apps over MCP, **verifies every mutation with an independent read-back**, and writes a tamper-evident proof trace — a SHA-256 hash-chained attestation ledger you can audit afterwards.
+Agents today are confident liars. Ask one to "file the issue" and it tells you it did —
+whether or not the write actually landed. bloop's answer is a discipline, not a disclaimer:
 
 ```
 plan → act (MCP tools, in parallel) → verify (independent read-back) → attest (hash-chained) → report
 ```
 
-Everything streams: plan updates, tool calls with live timing, verifications, code runs, images, memories — on the chat and in the **proof trace** panel.
+Every mutating call is followed by a **read-back from the same system of record**, then
+recorded in an attestation ledger where each entry's hash is chained to the previous one
+(`sha256(prev_hash ‖ entry)`). Reorder, delete or edit a step and the chain breaks. The UI
+shows every verification — and honestly flags anything it *couldn't* verify.
 
-## External apps used
+That one idea — *claims are worthless without receipts* — is the whole product.
 
-| App | How bloop uses it | Connection |
+## What it can do
+
+### Every app you have — and any you don't
+
+- **15+ apps wired in**: GitHub, Linear, Notion, Sentry, Stripe, Zapier, Hugging Face,
+  Exa, Tavily, Higgsfield, Cloudflare (docs, bindings, observability), DeepWiki, Context7.
+- **Add any MCP server by URL** — paste it and bloop probes the endpoint, detects whether it
+  wants **OAuth, a bearer token, or nothing**, and preselects the right connect flow.
+- **`load_tools`** — the model searches every connected server's tools by keyword and pulls
+  only the schemas it needs, so bloop scales past provider tool caps instead of hitting them.
+
+### Real work, not chat
+
+- **Sandboxed code** — `run_code` executes Python, JavaScript and Bash in a per-user
+  Cloudflare container; isolated by `sandbox_id`, billed only while awake.
+- **A real workspace** — `workspace_write / read / list / delete / exec`: files, `npm`/`pip`
+  installs, builds and tests, persisted in R2 and hydrated into the container on demand.
+- **Image generation & editing** — `generate_image` / `edit_image` via Azure, served from R2.
+- **Attachments & vision** — drag in a screenshot or file and bloop sees it.
+- **Voice** — a live voice concierge (Deepgram agent) that answers aloud and streams the
+  resulting task into the chat.
+
+### A browser you can share
+
+- **`browse`** — reads any page as clean markdown (Readability + Turndown on Cloudflare
+  Browser Rendering) or takes a screenshot.
+- **`browser_handoff`** — hands the user a **live remote browser** for the one thing agents
+  can't do: signing in. The user clicks through the login, then hands it back.
+
+### An agent of agents
+
+- **`delegate`** — spawns parallel *research* (read-only) or *build* (write + run code)
+  subagents, each streaming into nested live cards.
+- **Parallel tool calls** — calls across different apps run concurrently, results stay ordered.
+- **Modes** — `default` for everyday work, `think` (forces a plan first), `deep`
+  (25 iterations, ≥2 sources, cited source chips).
+
+### Remembers, and gets better
+
+- **Memory** — `remember` / `forget` durable facts; bloop recalls them next session.
+- **Context file** — a user-editable standing brief injected into every run.
+- **Lessons file** — bloop records what failed and what it learned, so it doesn't repeat
+  mistakes. Both files are editable in the knowledge panel.
+- **Skills** — teach a workflow once (`create_skill`), reuse it forever; a skills marketplace
+  and built-in tool toggles live in the app.
+
+### A trace you can trust
+
+- **Live proof trace** — plan steps, tool calls with timing, verifications, hash-chained
+  attestations, unverified-write warnings, sources.
+- **`/api/ledger`** — the raw attestation ledger, per-user and auditable.
+
+## External apps
+
+| App | Used for | Connection |
 |---|---|---|
-| **GitHub** | issues, PRs, repos, code search — the main write target (47 tools) | hosted MCP `api.githubcopilot.com/mcp` |
-| **DeepWiki** | research any public repo | MCP `mcp.deepwiki.com` |
-| **Context7** | up-to-date library docs | MCP `mcp.context7.com` |
-| **Cloudflare Docs** | platform docs lookups | MCP `docs.mcp.cloudflare.com` |
-| **Azure OpenAI** | gpt-5.6 terra / sol / luna reasoning, gpt-image generation | REST |
-| **Cloudflare Sandbox** | python / js / bash execution in containers | service binding |
-| **Zapier MCP** *(optional)* | Slack, Gmail, Notion and thousands more | `ZAPIER_MCP_URL` |
-| **Composio** *(optional)* | 1,000+ apps | `COMPOSIO_MCP_URL` |
-| **Any MCP server** | users add their own in the in-app marketplace | per-user, stored in D1 |
-
-## Features
-
-**Shipped (v2, live):** email/password auth · persisted conversations with rolling summaries · memory (`remember` / `forget`) · MCP marketplace · `load_tools` tool discovery (the model pulls only the schemas it needs from 50+) · model picker (gpt-5.6 family) · `generate_image` → R2 · `run_code` sandbox · hash-chained proof ledger · unverified-write detection in the UI.
-
-**v3 (in progress — see [`TODO.md`](TODO.md) for live status):**
-
-- **context + lessons files** — a user-editable context file and an agent-grown lessons file, injected into every run (`update_context`, `save_lesson`); tabbed knowledge editor · *merged*
-- **browser** — `browse` any page as clean markdown (Readability + Turndown on Cloudflare Browser Rendering) or webp screenshot; `browser_handoff` lets the user take over a live remote browser to log in · *sandbox endpoints live, agent + ui integrating*
-- **parallel tool calls** — calls across different apps run concurrently, results stay ordered
-- **subagents** — `delegate` spawns streamed subagents: *research* (read-only) or *build* (write + run code in a durable per-conversation workspace), shown as nested live cards
-- **code workspace + editor** — R2-backed project files, container exec with hydrate/sync, in-app editor with run button
-- **modes** — *think* (forced plan-first) and *deep* (25 iterations, ≥2 sources, cited source chips)
-- **open signup** — invite codes removed
-- **polish** — tool-call animations, thinking indicator, view transitions, webp assets, code-split bundle
+| **GitHub** | issues, PRs, repos, code search — the main write target | MCP `api.githubcopilot.com/mcp` |
+| **Linear, Notion, Sentry, Stripe, Higgsfield, Tavily** | OAuth'd app actions | catalog MCP servers |
+| **Zapier** | Slack, Gmail, Sheets — 8,000+ apps | `ZAPIER_MCP_URL` |
+| **Composio** | 1,000+ more apps | `COMPOSIO_MCP_URL` |
+| **DeepWiki · Context7 · Cloudflare Docs · Exa · Hugging Face** | research, docs, search | public MCP servers |
+| **Azure OpenAI** | gpt-5.6 terra / sol / luna reasoning · image generation | REST |
+| **Cloudflare Sandbox** | code execution, workspaces, remote browser | service binding + containers |
+| **Any MCP server** | users add their own | per-user, stored in D1 |
 
 ## Architecture
 
 ```
-/        → landing page            (landing/, served from worker assets)
-/app     → React SPA               (web/)
-/api/*   → Rust/WASM agent worker  (core/)   — auth-guarded
-/files/* → R2 objects              (core/)   — auth-guarded
-sandbox  → TS worker bloop-sandbox (sandbox/) — containers + Browser Rendering, reached only via service binding
+/        → landing page              (landing/, served from worker assets)
+/app     → React SPA                 (web/)
+/api/*   → Rust/WASM agent worker    (core/)    — auth-guarded
+/files/* → R2 objects                (core/)    — auth-guarded
+sandbox  → TS worker bloop-sandbox   (sandbox/) — containers + Browser Rendering,
+                                                reached only via service binding
 ```
 
 | Piece | Tech | Path |
 |---|---|---|
 | Agent core | **Rust → WASM on Cloudflare Workers** (workers-rs): SSE agentic loop, hand-rolled streamable-HTTP MCP client, Azure OpenAI with model fallback, hash-chained ledger | `core/` |
 | Web app | React 19 · Vite · Tailwind v4 | `web/` |
-| Sandbox | `@cloudflare/sandbox` containers + `@cloudflare/puppeteer` (Browser Rendering) | `sandbox/` |
-| Persistence | **D1** users/conversations/messages/memories/servers/user_files · **KV** sessions · **R2** images, screenshots, workspaces | `core/schema.sql` |
-| Evals | scripted multi-app tasks → SSE trace assertions + external `gh api` ground truth → markdown report | `evals/run.mjs` |
-| CI/CD | GitHub Actions: cargo check (wasm32) · sandbox typecheck · web build → deploy sandbox → D1 schema → core → smoke test | `.github/workflows/deploy.yml` |
+| Sandbox | `@cloudflare/sandbox` containers · `@cloudflare/puppeteer` · Browser Rendering | `sandbox/` |
+| Persistence | **D1** users / conversations / messages / memories / servers / files / skills · **KV** sessions · **R2** images, screenshots, workspaces | `core/schema.sql` |
+| Auth | email/password (PBKDF2) · session cookies · per-user everything | `core/src/auth.rs` |
+| Evals | scripted tasks → SSE trace assertions + external `gh api` ground truth | `evals/run.mjs` |
+| CI/CD | GitHub Actions: cargo check (wasm32) · sandbox typecheck · web build → deploy → smoke | `.github/workflows/deploy.yml` |
 
-SSE event contract and API surface: [`HANDOFF.md`](HANDOFF.md).
+API surface and SSE contract: [`docs/contracts-v3.md`](docs/contracts-v3.md) ·
+Feature tour with ready-to-paste prompts: [`docs/USE-BLOOP.md`](docs/USE-BLOOP.md).
 
 ## Reliability & evaluation
 
 How we know it works — not just that it looked right in a demo:
 
-1. **Verify-by-readback.** The operating discipline requires an independent read call after every mutating action before bloop may claim success.
-2. **Attestation ledger.** Each verification is hash-chained (`sha256(prev_hash ‖ entry)`) — tamper-evident, exposed at `GET /api/ledger` and in the proof trace.
-3. **Unverified-write detection.** The UI counts mutating tool results against attestations and flags any gap.
-4. **Failure transparency.** Tool errors are passed to the model verbatim (`ERROR: …`) and reported, never papered over; model calls fall back from stream → non-stream → fallback model.
-5. **Lessons loop.** When bloop works around a failure it records a one-line lesson that is injected into future runs.
-6. **Eval suite with external ground truth.** `node evals/run.mjs` runs 6 tasks against the real deployment — read-only GitHub, write + verify, research → write (deepwiki + github), multi-app digest (github + cf-docs), sandbox code execution, and a deliberately impossible task that must be reported as a failure. Assertions check the SSE trace (tool apps used, verify events, no false success) **and** real GitHub state via `gh api`. Latest: **6/6 pass on production.** See [`RELIABILITY.md`](RELIABILITY.md).
+1. **Verify-by-readback.** An independent read follows every mutating action before success may be claimed.
+2. **Attestation ledger.** Each verification is hash-chained — tamper-evident at `GET /api/ledger`.
+3. **Unverified-write detection.** The UI counts mutations against attestations and flags any gap.
+4. **Failure transparency.** Tool errors reach the model verbatim and are reported, never papered over; model calls fall back stream → non-stream → fallback model.
+5. **Lessons loop.** Worked-around failures become one-line lessons injected into future runs.
+6. **Eval suite with external ground truth.** `node evals/run.mjs` runs 6 tasks against the real deployment — read-only GitHub, write + verify, research → write, multi-app digest, sandbox code, and a deliberately impossible task that must be reported as a failure. Assertions check the SSE trace *and* real GitHub state. **Latest: 6/6 on production.** See [`RELIABILITY.md`](RELIABILITY.md).
 
 ## Setup
 
-Prereqs: Node 22, Rust stable + `wasm32-unknown-unknown`, `worker-build` (`cargo install worker-build`), a Cloudflare account (wrangler logged in), Docker (sandbox container build), Azure OpenAI with gpt-5.6 + gpt-image deployments, a GitHub token.
+Prereqs: Node 22, Rust + `wasm32-unknown-unknown`, `worker-build`, a Cloudflare account,
+Docker (sandbox image), Azure OpenAI deployments, a GitHub token.
 
 ```bash
 # 1. backend secrets (bare KEY=value, gitignored)
@@ -110,17 +163,20 @@ BLOOP_API=http://localhost:8899 EVAL_TOKEN=... node evals/run.mjs
 
 ```bash
 cd sandbox && npm ci && npx wrangler deploy --config wrangler.toml   # container + browser worker
-cd ../web  && npm run build                                          # builds assets served by core
+cd ../web  && npm run build                                          # assets served by core
 cd ../core && npx wrangler d1 execute bloop-db --remote --file schema.sql
 npx wrangler deploy --config wrangler.toml                           # never from the repo root
 # secrets: npx wrangler secret put AZURE_OPENAI_API_KEY   (GITHUB_TOKEN, SANDBOX_TOKEN, EVAL_TOKEN …)
 # optional: cd sandbox && npx wrangler secret put CF_BROWSER_TOKEN   (live browser handoff)
 ```
 
-CI deploys on every push to `main` once the `CLOUDFLARE_API_TOKEN` repo secret is set.
+CI deploys on every push to `main` once `CLOUDFLARE_API_TOKEN` is set as a repo secret.
 
-> The repo-root `src/` + `wrangler.jsonc` is the original Agents-SDK TypeScript prototype, kept for reference only — **don't deploy from the root**.
+> The repo-root `src/` + `wrangler.jsonc` is the original Agents-SDK TypeScript prototype —
+> kept for reference only. **Never deploy from the root.**
 
 ## Stack
 
-Cloudflare Workers (Rust→WASM + TS) · D1 · KV · R2 · Workers Assets · service bindings · Containers (`@cloudflare/sandbox`) · Browser Rendering · MCP (streamable HTTP) · Azure OpenAI gpt-5.6 + gpt-image · React 19 · Vite · Tailwind v4 · GitHub Actions.
+Cloudflare Workers (Rust→WASM + TS) · D1 · KV · R2 · Workers Assets · service bindings ·
+Containers (`@cloudflare/sandbox`) · Browser Rendering · MCP (streamable HTTP + OAuth 2.1) ·
+Azure OpenAI gpt-5.6 + gpt-image · Deepgram (voice) · React 19 · Vite · Tailwind v4 · GitHub Actions.

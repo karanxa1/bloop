@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { ToolCall } from "../types";
 import { CheckIcon, ChevronIcon, SpinnerIcon, WrenchIcon, XIcon } from "../icons";
+import { AppLogo } from "./ServerLogo";
 
 function pretty(value: unknown): string {
   if (typeof value === "string") return value;
@@ -27,7 +28,8 @@ export function ToolCallCard({ call }: { call: ToolCall }) {
           {call.name}
         </span>
         {call.app && (
-          <span className="rounded-full bg-bloop px-2 py-0.5 text-[10px] font-semibold tracking-wide text-white">
+          <span className="flex items-center gap-1 rounded-full bg-bloop/15 py-0.5 pl-1.5 pr-2 text-[10px] font-semibold tracking-wide text-bloop-deep">
+            <AppLogo name={call.app} className="h-3 w-3" />
             {call.app}
           </span>
         )}

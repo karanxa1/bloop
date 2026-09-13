@@ -3,9 +3,9 @@ import type { FormEvent } from "react";
 import { ApiError, addServer, deleteServer, listServers } from "../api";
 import type { McpServer } from "../types";
 import { Modal } from "./Modal";
+import { ServerLogo } from "./ServerLogo";
 import {
   AlertIcon,
-  PlugIcon,
   PlusIcon,
   SearchIcon,
   SpinnerIcon,
@@ -14,6 +14,18 @@ import {
 import { cx } from "../lib";
 
 const CATEGORIES = ["all", "productivity", "dev tools", "files", "data"];
+
+/** well-known MCP servers users can add in one click */
+const POPULAR: { name: string; url: string; blurb: string }[] = [
+  { name: "zapier", url: "https://mcp.zapier.com", blurb: "slack · gmail · notion · 8k apps" },
+  { name: "github", url: "https://api.githubcopilot.com/mcp/", blurb: "issues, prs, code search" },
+  { name: "huggingface", url: "https://hf.co/mcp", blurb: "models, datasets, spaces" },
+  { name: "linear", url: "https://mcp.linear.app/mcp", blurb: "issues + projects" },
+  { name: "notion", url: "https://mcp.notion.com/mcp", blurb: "docs + databases" },
+  { name: "sentry", url: "https://mcp.sentry.dev/mcp", blurb: "errors + traces" },
+  { name: "figma", url: "https://mcp.figma.com/mcp", blurb: "designs + components" },
+  { name: "cloudflare", url: "https://docs.mcp.cloudflare.com/mcp", blurb: "workers docs" }
+];
 
 interface MarketplaceModalProps {
   onClose: () => void;
@@ -151,9 +163,7 @@ export function MarketplaceModal({ onClose, onChanged }: MarketplaceModalProps) 
                   className="motion-safe:rise border border-neutral-200 bg-white p-3.5"
                 >
                   <div className="flex items-start gap-2.5">
-                    <span className="flex h-9 w-9 shrink-0 items-center justify-center bg-bloop/15 text-bloop-deep">
-                      <PlugIcon className="h-4.5 w-4.5" />
-                    </span>
+                    <ServerLogo name={s.name} url={s.url} />
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-1.5">
                         <span className="truncate font-wordmark text-sm font-bold text-neutral-800">
@@ -202,6 +212,54 @@ export function MarketplaceModal({ onClose, onChanged }: MarketplaceModalProps) 
             </ul>
           )}
         </div>
+
+        {/* popular catalog — click prefills the add form */}
+        {!query && (
+          <div className="mt-4">
+            <p className="mb-2 font-wordmark text-xs font-bold text-bloop-deep/70">
+              popular servers
+            </p>
+            <ul className="grid gap-2 sm:grid-cols-2">
+              {POPULAR.map((p) => {
+                const added = servers.some(
+                  (s) => s.name.toLowerCase() === p.name || s.url === p.url
+                );
+                return (
+                  <li key={p.name}>
+                    <button
+                      type="button"
+                      disabled={added}
+                      onClick={() => {
+                        setName(p.name);
+                        setUrl(p.url);
+                        setFormOpen(true);
+                      }}
+                      className={cx(
+                        "flex w-full items-center gap-2.5 border border-neutral-200 bg-white p-2.5 text-left transition-colors duration-150 focus-visible:outline-2 focus-visible:outline-bloop-deep",
+                        added ? "opacity-45" : "hover:border-bloop/60 hover:bg-bloop/5"
+                      )}
+                    >
+                      <ServerLogo name={p.name} url={p.url} className="h-8 w-8" />
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate font-wordmark text-xs font-bold text-neutral-800">
+                          {p.name}
+                        </span>
+                        <span className="block truncate text-[10px] text-neutral-400">
+                          {p.blurb}
+                        </span>
+                      </span>
+                      {added ? (
+                        <span className="text-[10px] font-semibold text-bloop-deep">added</span>
+                      ) : (
+                        <PlusIcon className="h-3.5 w-3.5 shrink-0 text-neutral-400" />
+                      )}
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        )}
 
         {/* add server */}
         <div className="mt-4 border-t border-neutral-100 pt-4">

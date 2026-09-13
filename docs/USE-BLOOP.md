@@ -20,6 +20,68 @@ Paste this to exercise most of the stack in a single run. Use **deep** mode.
 
 ---
 
+## the full system test prompt
+
+Names every tool so nothing is skipped. Run in **deep** mode and expect a pass/fail table back.
+
+> Run a complete self-test of every capability you have. Work through this list in order and
+> report a pass/fail table at the end. Do not skip any item, and if something fails, say so
+> honestly instead of working around it.
+>
+> 1. **plan + proof** — Start by calling `update_plan` with these steps. After each mutation
+>    below, call `attest` with the read-back you performed.
+> 2. **tool search** — Call `load_tools` with the keyword "sentry" and tell me which app tools
+>    it surfaced, then call `load_tools` again with "search".
+> 3. **mcp apps** — Using the connected apps: list my 5 most recently pushed repos on GitHub.
+>    Then query the Cloudflare docs MCP for how D1 migrations work. Then ask DeepWiki one
+>    question about the cloudflare/workers-rs repo.
+> 4. **web search** — Search the web for what changed in the Cloudflare Workers runtime in the
+>    last 30 days and cite your sources.
+> 5. **browse** — Call `browse` on https://developers.cloudflare.com/d1/ and extract the current
+>    prepared-statement API. Also take a screenshot of the page.
+> 6. **browser handoff** — Call `browser_handoff` for https://github.com/login so I can take over
+>    the browser and sign in myself.
+> 7. **sandbox code (python)** — Call `run_code` with python to compute the first 20 fibonacci
+>    numbers and print them.
+> 8. **sandbox code (javascript)** — Call `run_code` with javascript to reverse the string "bloop"
+>    and print it.
+> 9. **workspace files** — Call `workspace_write` to create `notes/self-test.md`, `workspace_read`
+>    it back, `workspace_list` the workspace, then `workspace_delete` a scratch file you create
+>    first.
+> 10. **workspace shell** — Call `workspace_exec` to run `python3 -c "import sys; print(sys.version)"`
+>     and then `ls -la`.
+> 11. **image generation** — Call `generate_image` for "a tiny lime-green blob reading a book,
+>     flat vector style" and show me the result.
+> 12. **memory** — Call `remember` with "I prefer terse answers and my timezone is IST", then call
+>     `remember` a second time with a different fact, then list my memories back to me.
+> 13. **context file** — Call `update_context` to record that I'm building an agent on Cloudflare
+>     Workers and dislike verbose output. Read it back.
+> 14. **lessons file** — Call `save_lesson` with "workers.dev → workers.dev fetch fails with error
+>     1042; use a service binding instead." Read it back.
+> 15. **subagents** — Call `delegate` to run two subagents in parallel: one researching D1 vs
+>     Postgres for edge apps, one researching MCP transport choices. Merge both results.
+> 16. **parallel tool calls** — Fetch the latest release of cloudflare/workers-rs and of
+>     cloudflare/durable-objects in the same turn.
+> 17. **external write + verification** — Create a GitHub issue in karanxa1/bloop-evals, then read
+>     it back and attest that it exists.
+> 18. **failure transparency** — Try to read a file that doesn't exist and tell me exactly what the
+>     error was, without pretending it succeeded.
+> 19. **voice** — After this run finishes, I'll tap the voice orb and ask you something by voice;
+>     you should answer aloud and stream the task here.
+> 20. **summary** — Finish with the pass/fail table, your final plan state, and the total count of
+>     tool calls, verifications and errors.
+
+Short version:
+
+> Self-test everything: load_tools for "sentry", list my recent GitHub repos, query the Cloudflare
+> docs and DeepWiki, search the web, browse a page and screenshot it, hand me a browser to log in,
+> run_code in python and javascript, write/read/list/delete a workspace file, run a shell command,
+> generate an image, remember two facts, update my context file, save a lesson, delegate two
+> parallel subagents, fetch two repos in parallel, create and verify a GitHub issue, and honestly
+> report one failure — then give me a pass/fail table.
+
+---
+
 ## feature-by-feature prompts
 
 | # | Feature | Prompt |

@@ -124,6 +124,34 @@ fn builtin_tools() -> Vec<Value> {
         json!({
             "type": "function",
             "function": {
+                "name": "update_context",
+                "description": "Overwrite the user's context file — standing background and instructions (projects, stack, tone, constraints) shown to you in every chat. Read the current file from your system prompt, merge in the change, and write the FULL new markdown. Only when the user asks, or a durable change is obvious.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "markdown": {"type": "string", "description": "Complete new file content (markdown, max ~4000 chars is used)"}
+                    },
+                    "required": ["markdown"]
+                }
+            }
+        }),
+        json!({
+            "type": "function",
+            "function": {
+                "name": "save_lesson",
+                "description": "Append one short lesson learned to the user's lessons file so future runs avoid the same mistake — e.g. a tool quirk, a failed approach and what worked instead. One sentence, generalizable, no secrets.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "lesson": {"type": "string"}
+                    },
+                    "required": ["lesson"]
+                }
+            }
+        }),
+        json!({
+            "type": "function",
+            "function": {
                 "name": "load_tools",
                 "description": "Search all connected app servers' tools by keyword and return the top 10 matching tool schemas. Use when unsure which tool to call.",
                 "parameters": {
@@ -270,6 +298,22 @@ fn truncate(s: &str, max: usize) -> String {
     format!("{}…", &s[..end])
 }
 
+/// Keep the last ~`max` bytes of `s`, starting on a line boundary when possible.
+fn tail(s: &str, max: usize) -> String {
+    if s.len() <= max {
+        return s.to_string();
+    }
+    let mut start = s.len() - max;
+    while !s.is_char_boundary(start) {
+        start += 1;
+    }
+    let cut = &s[start..];
+    match cut.find('\n') {
+        Some(i) if i + 1 < cut.len() => format!("…\n{}", &cut[i + 1..]),
+        _ => format!("…{}", cut),
+    }
+}
+
 fn chunk_str(s: &str, n: usize) -> Vec<String> {
     let mut out = Vec::new();
     let mut cur = String::new();
@@ -299,13 +343,38 @@ fn base_prompt() -> &'static str {
      - REPORT: end concise — what was done, what was verified, links/ids, and any failure verbatim.\n\
      Memory: call remember() for durable user facts/preferences; call forget() for stale ones; \
      use remembered facts naturally, never recite the list.\n\
+     Files: the user's context file holds standing background — follow it; edit it with \
+     update_context only when asked. When you hit a non-obvious failure and find what works, \
+     call save_lesson with a one-line takeaway; heed existing lessons.\n\
      Use generate_image when the user wants visuals; run_code for computation or data munging.\n\
      Never claim an action succeeded without verification. Never fabricate tool results. \
      If a tool fails, report the real error and adapt. Be concise; prefer acting over asking. \
      You have many tools across many apps — always pick the minimal set needed."
 }
 
-fn system_prompt(servers: &[String], memories: &[String], summary: &str) -> String {
+/// Prompt budget for the injected user files.
+const CONTEXT_PROMPT_MAX: usize = 4000;
+const LESSONS_PROMPT_MAX: usize = 2000;
+
+#[derive(Default)]
+struct UserFiles {
+    context: String,
+    lessons: String,
+}
+
+async fn load_user_files(env: &Env, user_id: &str) -> UserFiles {
+    let get = |kind: &'static str| async move {
+        db::get_user_file(env, user_id, kind)
+            .await
+            .ok()
+            .and_then(|v| v.get("content").and_then(|c| c.as_str()).map(|s| s.to_string()))
+            .unwrap_or_default()
+    };
+    let (context, lessons) = futures::join!(get("context"), get("lessons"));
+    UserFiles { context, lessons }
+}
+
+fn system_prompt(servers: &[String], memories: &[String], summary: &str, files: &UserFiles) -> String {
     let mut p = base_prompt().to_string();
     p.push_str("\n\n## connected apps\n");
     if servers.is_empty() {
@@ -317,6 +386,16 @@ fn system_prompt(servers: &[String], memories: &[String], summary: &str) -> Stri
     if !summary.is_empty() {
         p.push_str("\n\n## conversation so far (summary)\n");
         p.push_str(summary);
+    }
+    let context = files.context.trim();
+    if !context.is_empty() {
+        p.push_str("\n\n## context file (user-maintained)\n");
+        p.push_str(&truncate(context, CONTEXT_PROMPT_MAX));
+    }
+    let lessons = files.lessons.trim();
+    if !lessons.is_empty() {
+        p.push_str("\n\n## lessons learned (newest last)\n");
+        p.push_str(&tail(lessons, LESSONS_PROMPT_MAX));
     }
     if !memories.is_empty() {
         p.push_str("\n\n## what you remember about this user\n");
@@ -683,6 +762,43 @@ async fn dispatch(ctx: &Ctx, clients: &mut [McpClient], name: &str, args: &Value
                     Err(e) => simple_outcome("bloop", false, format!("{}", e), vec![]),
                 }
             }
+            "update_context" => {
+                let md = args.get("markdown").and_then(|v| v.as_str()).unwrap_or("");
+                if md.len() > db::FILE_MAX {
+                    return simple_outcome("bloop", false, format!("context too large (max {} chars)", db::FILE_MAX), vec![]);
+                }
+                match db::put_user_file(&ctx.env, &ctx.user_id, "context", md).await {
+                    Ok(_) => simple_outcome(
+                        "bloop",
+                        true,
+                        json!({"ok": true, "chars": md.len()}).to_string(),
+                        vec![(
+                            "file".into(),
+                            json!({"kind": "context", "action": "update", "content": truncate(md, 300)}),
+                        )],
+                    ),
+                    Err(e) => simple_outcome("bloop", false, format!("{}", e), vec![]),
+                }
+            }
+            "save_lesson" => {
+                let lesson = args.get("lesson").and_then(|v| v.as_str()).unwrap_or("").trim();
+                if lesson.is_empty() {
+                    return simple_outcome("bloop", false, "empty lesson".into(), vec![]);
+                }
+                let lesson = truncate(lesson, 500);
+                match db::append_lesson(&ctx.env, &ctx.user_id, &lesson).await {
+                    Ok(_) => simple_outcome(
+                        "bloop",
+                        true,
+                        json!({"ok": true}).to_string(),
+                        vec![(
+                            "file".into(),
+                            json!({"kind": "lessons", "action": "append", "content": lesson}),
+                        )],
+                    ),
+                    Err(e) => simple_outcome("bloop", false, format!("{}", e), vec![]),
+                }
+            }
             "load_tools" => {
                 let query = args.get("query").and_then(|v| v.as_str()).unwrap_or("");
                 let found = search_tools(&ctx.all_tools, query);
@@ -836,6 +952,7 @@ pub fn run(o: RunOpts) -> impl Stream<Item = Result<Vec<u8>>> {
             })
             .take(30)
             .collect();
+        let files = load_user_files(&env, &o.user_id).await;
 
         // --- Connect MCP servers: global env servers + this user's servers ---
         let mut server_cfgs = cfg.servers.clone();
@@ -895,7 +1012,7 @@ pub fn run(o: RunOpts) -> impl Stream<Item = Result<Vec<u8>>> {
 
         let mut messages = vec![json!({
             "role": "system",
-            "content": system_prompt(&connected, &memories, &summary)
+            "content": system_prompt(&connected, &memories, &summary, &files)
         })];
         messages.extend(history);
         messages.push(json!({"role": "user", "content": o.message}));

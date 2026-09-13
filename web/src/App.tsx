@@ -19,6 +19,7 @@ import type {
   DeltaEvent,
   DoneEvent,
   ErrorEvent,
+  FileEvent,
   ImageEvent,
   MemoryEvent,
   ModelInfo,
@@ -283,6 +284,14 @@ function ChatApp({
         const d = evt.data as MemoryEvent;
         if (!d || typeof d.content !== "string") break;
         setExtras((x) => [...x, { kind: "memory", seq: nextSeq(), memory: d }]);
+        setMemTick((t) => t + 1);
+        break;
+      }
+
+      case "file": {
+        const d = evt.data as FileEvent;
+        if (!d || typeof d.kind !== "string") break;
+        setExtras((x) => [...x, { kind: "file", seq: nextSeq(), file: d }]);
         setMemTick((t) => t + 1);
         break;
       }

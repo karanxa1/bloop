@@ -36,6 +36,14 @@ export interface Memory {
   created_at: string;
 }
 
+export type UserFileKind = "context" | "lessons";
+
+export interface UserFile {
+  kind: UserFileKind;
+  content: string;
+  updated_at: string | null;
+}
+
 export interface McpServer {
   id: string;
   name: string;
@@ -91,6 +99,12 @@ export interface CodeEvent {
 
 export interface MemoryEvent {
   action: "remember" | "forget";
+  content: string;
+}
+
+export interface FileEvent {
+  kind: UserFileKind;
+  action: "update" | "append";
   content: string;
 }
 
@@ -175,6 +189,7 @@ export type TraceItem =
       code: { language: string; source: string; output?: string; ok?: boolean };
     }
   | { kind: "memory"; seq: number; memory: MemoryEvent }
+  | { kind: "file"; seq: number; file: FileEvent }
   | { kind: "tools"; seq: number; names: string[] };
 
 // mutating tool names — a result from one of these without a matching

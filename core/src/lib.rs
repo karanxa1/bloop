@@ -19,7 +19,7 @@ fn with_cors(mut resp: Response, origin: &str) -> Result<Response> {
     h.set("access-control-allow-credentials", "true")?;
     h.set(
         "access-control-allow-methods",
-        "GET, POST, PATCH, DELETE, OPTIONS",
+        "GET, POST, PUT, PATCH, DELETE, OPTIONS",
     )?;
     h.set("access-control-allow-headers", "content-type, authorization")?;
     Ok(resp)
@@ -125,6 +125,17 @@ async fn route_authed(
                     return memories_delete(&env, user_id, id.trim_matches('/')).await;
                 }
                 return json_err("method not allowed", 405);
+            }
+            if let Some(kind) = path.strip_prefix("/api/files/") {
+                let kind = kind.trim_matches('/');
+                if !db::FILE_KINDS.contains(&kind) {
+                    return json_err("unknown file kind", 404);
+                }
+                return match method {
+                    Method::Get => Response::from_json(&db::get_user_file(&env, user_id, kind).await?),
+                    Method::Put => user_file_put(req, &env, user_id, kind).await,
+                    _ => json_err("method not allowed", 405),
+                };
             }
             if let Some(id) = path.strip_prefix("/api/servers/") {
                 if method == Method::Delete {
@@ -321,6 +332,21 @@ async fn memories_add(mut req: Request, env: &Env, user_id: &str) -> Result<Resp
 async fn memories_delete(env: &Env, user_id: &str, id: &str) -> Result<Response> {
     db::delete_memory(env, user_id, id).await?;
     Response::from_json(&json!({"ok": true}))
+}
+
+// ---------- user files ----------
+
+async fn user_file_put(mut req: Request, env: &Env, user_id: &str, kind: &str) -> Result<Response> {
+    let body: Value = req.json().await.unwrap_or_else(|_| json!({}));
+    let content = match body.get("content").and_then(|v| v.as_str()) {
+        Some(c) => c,
+        None => return json_err("content required", 400),
+    };
+    if content.len() > db::FILE_MAX {
+        return json_err(&format!("file too large (max {} chars)", db::FILE_MAX), 413);
+    }
+    db::put_user_file(env, user_id, kind, content).await?;
+    Response::from_json(&db::get_user_file(env, user_id, kind).await?)
 }
 
 // ---------- servers ----------

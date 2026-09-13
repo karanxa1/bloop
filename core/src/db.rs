@@ -271,6 +271,63 @@ pub async fn forget_memories(env: &Env, user_id: &str, query: &str) -> Result<us
         .unwrap_or(0))
 }
 
+// ---------- user files (context / lessons) ----------
+
+pub const FILE_KINDS: &[&str] = &["context", "lessons"];
+/// Hard cap on a stored file; lessons drop their oldest lines past this.
+pub const FILE_MAX: usize = 20_000;
+
+pub async fn get_user_file(env: &Env, user_id: &str, kind: &str) -> Result<Value> {
+    let db = env.d1("DB")?;
+    let row = db
+        .prepare("SELECT content, updated_at FROM user_files WHERE user_id = ?1 AND kind = ?2")
+        .bind(&[js(user_id), js(kind)])?
+        .first::<Value>(None)
+        .await?;
+    Ok(json!({
+        "kind": kind,
+        "content": row.as_ref().and_then(|r| r.get("content")).and_then(|v| v.as_str()).unwrap_or(""),
+        "updated_at": row.as_ref().and_then(|r| r.get("updated_at")).cloned().unwrap_or(Value::Null),
+    }))
+}
+
+pub async fn put_user_file(env: &Env, user_id: &str, kind: &str, content: &str) -> Result<()> {
+    let db = env.d1("DB")?;
+    db.prepare(
+        "INSERT INTO user_files (user_id, kind, content, updated_at) VALUES (?1, ?2, ?3, datetime('now')) \
+         ON CONFLICT(user_id, kind) DO UPDATE SET content = excluded.content, updated_at = excluded.updated_at",
+    )
+    .bind(&[js(user_id), js(kind), js(content)])?
+    .run()
+    .await?;
+    Ok(())
+}
+
+/// Append `- lesson` to the lessons file, trimming the oldest lines past FILE_MAX.
+pub async fn append_lesson(env: &Env, user_id: &str, lesson: &str) -> Result<()> {
+    let cur = get_user_file(env, user_id, "lessons").await?;
+    let mut content = cur
+        .get("content")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .trim_end()
+        .to_string();
+    if !content.is_empty() {
+        content.push('\n');
+    }
+    content.push_str("- ");
+    content.push_str(&lesson.replace('\n', " "));
+    while content.len() > FILE_MAX {
+        match content.find('\n') {
+            Some(i) => {
+                content.drain(..=i);
+            }
+            None => break,
+        }
+    }
+    put_user_file(env, user_id, "lessons", &content).await
+}
+
 // ---------- servers ----------
 
 pub async fn list_user_servers(env: &Env, user_id: &str) -> Result<Vec<Value>> {

@@ -45,3 +45,14 @@ CREATE TABLE IF NOT EXISTS servers (
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS idx_servers_user ON servers(user_id);
+
+-- per-user markdown files injected into the system prompt:
+--   context: user-curated (or update_context) standing instructions/background
+--   lessons: append-only list the agent grows via save_lesson
+CREATE TABLE IF NOT EXISTS user_files (
+  user_id TEXT NOT NULL,
+  kind TEXT NOT NULL CHECK (kind IN ('context', 'lessons')),
+  content TEXT NOT NULL DEFAULT '',
+  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+  PRIMARY KEY (user_id, kind)
+);

@@ -4,7 +4,9 @@ import type {
   McpServer,
   Memory,
   ModelInfo,
-  User
+  User,
+  UserFile,
+  UserFileKind
 } from "./types";
 
 export class ApiError extends Error {
@@ -122,6 +124,20 @@ export function addMemory(content: string): Promise<Memory> {
 
 export function deleteMemory(id: string): Promise<void> {
   return req<void>(`/api/memories/${id}`, { method: "DELETE" });
+}
+
+// ── user files (context / lessons) ────────────────────────────────
+
+export function getUserFile(kind: UserFileKind): Promise<UserFile> {
+  return req<UserFile>(`/api/files/${kind}`);
+}
+
+export function putUserFile(kind: UserFileKind, content: string): Promise<UserFile> {
+  return req<UserFile>(`/api/files/${kind}`, {
+    method: "PUT",
+    headers: JSON_HEADERS,
+    body: JSON.stringify({ content })
+  });
 }
 
 // ── mcp servers ───────────────────────────────────────────────────

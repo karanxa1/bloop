@@ -1,4 +1,5 @@
 import type {
+  FileEvent,
   MemoryEvent,
   PlanStep,
   TraceItem,
@@ -10,6 +11,7 @@ import {
   AlertIcon,
   BrainIcon,
   CheckIcon,
+  PencilIcon,
   PlugIcon,
   ShieldCheckIcon,
   SpinnerIcon,
@@ -141,6 +143,8 @@ export function ProofTrace({ plan, trace, verifyCount, onClose }: ProofTraceProp
                     return <MemoryTraceRow key={`m-${item.seq}`} memory={item.memory} />;
                   case "tools":
                     return <ToolsLoadedRow key={`l-${item.seq}`} names={item.names} />;
+                  case "file":
+                    return <FileTraceRow key={`f-${item.seq}`} file={item.file} />;
                   default:
                     return null;
                 }
@@ -257,6 +261,20 @@ function MemoryTraceRow({ memory }: { memory: MemoryEvent }) {
           {memory.action === "forget" ? "forgot" : "remembered"}
         </span>{" "}
         {memory.content}
+      </span>
+    </li>
+  );
+}
+
+function FileTraceRow({ file }: { file: FileEvent }) {
+  return (
+    <li className="flex items-start gap-1.5 border border-neutral-200 border-l-2 border-l-bloop-deep bg-white px-2.5 py-1.5">
+      <PencilIcon className="mt-px h-3.5 w-3.5 shrink-0 text-bloop-deep" />
+      <span className="min-w-0 flex-1 text-[11px] leading-snug text-neutral-700">
+        <span className="font-semibold text-bloop-deep">
+          {file.kind === "lessons" ? "lesson saved" : "context updated"}
+        </span>{" "}
+        <span className="line-clamp-2">{file.content}</span>
       </span>
     </li>
   );

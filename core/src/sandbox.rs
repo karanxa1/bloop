@@ -1,7 +1,19 @@
 //! Calls into the bloop-sandbox worker (code runs, browser, workspaces).
 use crate::config::Config;
+use futures::future::{select, Either};
 use serde_json::{json, Value};
+use std::time::Duration;
 use worker::*;
+
+/// Wall-clock budget for a sandbox call. Code runs and workspace commands can
+/// wait out a container cold start; everything else should answer fast.
+fn timeout_ms(path: &str) -> u64 {
+    if path.starts_with("/run") || path.starts_with("/workspace") {
+        240_000
+    } else {
+        60_000
+    }
+}
 
 /// POST JSON to the sandbox worker. Prefers the SANDBOX service binding
 /// (worker→worker, no public hop — workers.dev hosts can't fetch each other,
@@ -27,23 +39,37 @@ pub async fn post(
     init.with_method(Method::Post)
         .with_headers(headers)
         .with_body(Some(body.to_string().into()));
-    let sent = match env.service("SANDBOX") {
-        Ok(f) => {
-            let req = Request::new_with_init(&format!("https://sandbox.internal{}", path), &init)
-                .map_err(|e| format!("sandbox request: {}", e))?;
-            f.fetch_request(req).await
-        }
-        Err(_) => {
-            let base = match &cfg.sandbox_url {
-                Some(u) if !u.is_empty() => u,
-                _ => return Err("sandbox not configured".into()),
-            };
-            let req = Request::new_with_init(&format!("{}{}", base, path), &init)
-                .map_err(|e| format!("sandbox request: {}", e))?;
-            Fetch::Request(req).send().await
+    let sent = async {
+        match env.service("SANDBOX") {
+            Ok(f) => {
+                let req = Request::new_with_init(&format!("https://sandbox.internal{}", path), &init)
+                    .map_err(|e| format!("sandbox request: {}", e))?;
+                f.fetch_request(req).await.map_err(|e| format!("sandbox fetch failed: {}", e))
+            }
+            Err(_) => {
+                let base = match &cfg.sandbox_url {
+                    Some(u) if !u.is_empty() => u,
+                    _ => return Err("sandbox not configured".to_string()),
+                };
+                let req = Request::new_with_init(&format!("{}{}", base, path), &init)
+                    .map_err(|e| format!("sandbox request: {}", e))?;
+                Fetch::Request(req).send().await.map_err(|e| format!("sandbox fetch failed: {}", e))
+            }
         }
     };
-    let mut resp = sent.map_err(|e| format!("sandbox fetch failed: {}", e))?;
+    // A tenant's container cold-starts on first use, so /run and workspace calls
+    // get a long budget; everything else is quick. Racing a Delay keeps a wedged
+    // container from hanging the chat forever.
+    let budget = Duration::from_millis(timeout_ms(path));
+    let mut resp = match select(Box::pin(sent), Box::pin(Delay::from(budget))).await {
+        Either::Left((r, _)) => r?,
+        Either::Right(_) => {
+            return Err(format!(
+                "the sandbox is still starting (waited {}s) — try again in a moment",
+                budget.as_secs()
+            ))
+        }
+    };
     let status = resp.status_code();
     let text = resp.text().await.unwrap_or_default();
     let v = serde_json::from_str::<Value>(&text)

@@ -7,7 +7,7 @@ Built for the [Multi-App AI Agent Hackathon](https://multiappagenthackathon.com/
 | | |
 |---|---|
 | **Live app** | https://bloop.rough-cell-383c.workers.dev (landing) · [`/app`](https://bloop.rough-cell-383c.workers.dev/app) (agent) |
-| **Demo video** | _link coming — ≤ 2 min_ |
+| **Demo video** | [watch on Loom](https://www.loom.com/share/fdcc943af2e24d599e647a1b5735f784) |
 | **Evals** | **6/6 pass** against production (`evals/report-*.md`) |
 
 ---

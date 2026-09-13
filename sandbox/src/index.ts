@@ -31,8 +31,12 @@ interface Env {
 const SLOT_KEY = "bloop:exec-slots";
 
 export class Sandbox extends BaseSandbox<Env> {
-	/** Idle tenant containers stop quickly to keep cost proportional to use. */
-	override sleepAfter: string | number = "5m";
+	/**
+	 * Idle tenant containers stop to keep cost proportional to use. Kept long
+	 * enough that a working session doesn't pay a cold start between prompts —
+	 * only awake containers bill, and the account cap bounds the worst case.
+	 */
+	override sleepAfter: string | number = "30m";
 	/**
 	 * Blocks container HTTP(S) egress to metadata / link-local / private
 	 * targets. Enforced by the Containers outbound proxy on hostname globs, so
@@ -74,6 +78,19 @@ export class Sandbox extends BaseSandbox<Env> {
 		const slots = (await this.ctx.storage.get<Record<string, number>>(SLOT_KEY)) ?? {};
 		if (token in slots) {
 			delete slots[token];
+			await this.ctx.storage.put(SLOT_KEY, slots);
+		}
+	}
+
+	/**
+	 * Extend a held slot once its request has cleared the cold start. Slots are
+	 * taken with a short TTL so an abandoned request (closed tab, canceled fetch)
+	 * frees its slot quickly instead of blocking the tenant for a full run.
+	 */
+	async bloopRenewSlot(token: string, ttlMs: number): Promise<void> {
+		const slots = (await this.ctx.storage.get<Record<string, number>>(SLOT_KEY)) ?? {};
+		if (token in slots) {
+			slots[token] = Date.now() + ttlMs;
 			await this.ctx.storage.put(SLOT_KEY, slots);
 		}
 	}
@@ -246,23 +263,67 @@ function capOutput(stdout: string, stderr: string): { stdout: string; stderr: st
 // ---------------------------------------------------------------------------
 
 function tenantContainer(env: Env, sandboxId: string) {
-	return getSandbox(env.Sandbox, sandboxId);
+	return getSandbox(env.Sandbox, sandboxId, { containerTimeouts: CONTAINER_TIMEOUTS });
+}
+
+/**
+ * A tenant's first container has to pull the image and boot, which comfortably
+ * exceeds the SDK defaults (30s instance / 90s port) and used to surface as a
+ * 500 after ~135s. Give a cold start room to finish; a warm tenant answers in ms.
+ */
+const CONTAINER_TIMEOUTS = {
+	instanceGetTimeoutMS: 60_000,
+	portReadyTimeoutMS: 180_000,
+	waitIntervalMS: 500,
+};
+
+/** How long a request keeps retrying while its container comes up. */
+const COLD_START_BUDGET_MS = 200_000;
+
+/** Slot TTL before the container is confirmed up; extended by `renew` after. */
+const SLOT_COLD_START_MS = 120_000;
+
+/** Errors that mean "the container isn't up yet" rather than "your code failed". */
+function isStarting(err: unknown): boolean {
+	const msg = errorMessage(err);
+	return /container is starting|container unavailable|not ready|no container instance|starting up/i.test(msg);
+}
+
+/** Retry a container call while the container is still coming up. */
+async function withColdStartRetry<T>(fn: () => Promise<T>, deadlineMs: number): Promise<T> {
+	const started = Date.now();
+	for (;;) {
+		try {
+			return await fn();
+		} catch (err) {
+			if (!isStarting(err) || Date.now() - started > deadlineMs) throw err;
+			await new Promise((r) => setTimeout(r, 1_000));
+		}
+	}
 }
 
 /**
  * Enforce the per-sandbox_id request rate and concurrent-exec cap, run `fn`,
  * and always release the slot.
  */
-async function withExecSlot<T>(env: Env, sandboxId: string, ttlMs: number, fn: () => Promise<T>): Promise<T> {
+async function withExecSlot<T>(
+	env: Env,
+	sandboxId: string,
+	ttlMs: number,
+	fn: (renew: () => Promise<void>) => Promise<T>,
+): Promise<T> {
 	const { success } = await env.EXEC_RATE.limit({ key: sandboxId });
 	if (!success) throw new HttpError(429, "rate limit exceeded: max 30 exec/run requests per minute per sandbox");
 	const stub = env.Sandbox.get(env.Sandbox.idFromName(sandboxId));
-	const token = await stub.bloopAcquireSlot(MAX_CONCURRENT_EXEC, ttlMs);
+	// Take the slot with only the cold-start window, then extend it to the full
+	// run once the container is up — see bloopRenewSlot.
+	const token = await stub.bloopAcquireSlot(MAX_CONCURRENT_EXEC, SLOT_COLD_START_MS);
 	if (!token) {
 		throw new HttpError(429, `too many concurrent executions: max ${MAX_CONCURRENT_EXEC} per sandbox`);
 	}
+	const renew = () => stub.bloopRenewSlot(token, ttlMs).catch(() => {});
 	try {
-		return await fn();
+		return await fn(renew);
 	} finally {
 		await stub.bloopReleaseSlot(token).catch(() => {});
 	}
@@ -285,23 +346,31 @@ async function handleRun(request: Request, env: Env): Promise<Response> {
 		return json({ error: `unsupported language: ${language}` }, 400);
 	}
 
-	return withExecSlot(env, sandboxId, EXEC_TIMEOUT_MS + 60_000, async () => {
+	return withExecSlot(env, sandboxId, EXEC_TIMEOUT_MS + 60_000, async (renew) => {
 		const started = Date.now();
 		const container = tenantContainer(env, sandboxId);
 		let sessionId: string | undefined;
 		try {
 			// Own shell session so concurrent runs don't collide in the default one.
-			const sandbox = await container.createSession({ id: `run-${crypto.randomUUID()}` });
+			const sandbox = await withColdStartRetry(
+				() => container.createSession({ id: `run-${crypto.randomUUID()}` }),
+				COLD_START_BUDGET_MS,
+			);
 			sessionId = sandbox.id;
+			await renew(); // container is up — hold the slot for the actual run
 			// Unique path per request so concurrent runs can't clobber each other.
 			const path = `/tmp/snippet-${crypto.randomUUID()}.${lang.ext}`;
 			await sandbox.writeFile(path, code);
 			// `timeout` kills the process at 30s (exit 124) so partial output is
 			// preserved; the SDK timeout above is only a backstop.
-			const result = await sandbox.exec(
-				`cd /tmp && ${RUN_AS} timeout --signal=TERM --kill-after=5 ${EXEC_TIMEOUT_S} ${lang.cmd} ${path}; ` +
-					`code=$?; rm -f ${path}; exit $code`,
-				{ timeout: EXEC_TIMEOUT_MS },
+			const result = await withColdStartRetry(
+				() =>
+					sandbox.exec(
+						`cd /tmp && ${RUN_AS} timeout --signal=TERM --kill-after=5 ${EXEC_TIMEOUT_S} ${lang.cmd} ${path}; ` +
+							`code=$?; rm -f ${path}; exit $code`,
+						{ timeout: EXEC_TIMEOUT_MS },
+					),
+				COLD_START_BUDGET_MS,
 			);
 			const { stdout, stderr } = capOutput(result.stdout ?? "", result.stderr ?? "");
 			return json({
@@ -940,7 +1009,9 @@ async function handleWorkspaceExec(request: Request, env: Env): Promise<Response
 
 	// Slot TTL covers lock wait + hydrate + run + sync.
 	const slotTtlMs = (WS_LOCK_WAIT_S + timeoutS + 180) * 1000;
-	return withExecSlot(env, sandboxId, slotTtlMs, () => runWorkspaceExec(env, sandboxId, workspace, command, timeoutS));
+	return withExecSlot(env, sandboxId, slotTtlMs, (renew) =>
+		runWorkspaceExec(env, sandboxId, workspace, command, timeoutS, renew),
+	);
 }
 
 async function runWorkspaceExec(
@@ -949,16 +1020,21 @@ async function runWorkspaceExec(
 	workspace: string,
 	command: string,
 	timeoutS: number,
+	renew: () => Promise<void>,
 ): Promise<Response> {
 	const started = Date.now();
 	const container = tenantContainer(env, sandboxId);
 	const dir = `${WS_ROOT}/${workspace}`;
 	let sandbox: SandboxStub;
 	try {
-		sandbox = await container.createSession({ id: `ws-${crypto.randomUUID()}` });
+		sandbox = await withColdStartRetry(
+			() => container.createSession({ id: `ws-${crypto.randomUUID()}` }),
+			COLD_START_BUDGET_MS,
+		);
 	} catch (err) {
 		throw new HttpError(500, `failed to create workspace session: ${errorMessage(err)}`);
 	}
+	await renew(); // container is up — hold the slot for hydrate + run + sync
 	let lock: string;
 	try {
 		lock = await acquireWorkspaceLock(sandbox, workspace);

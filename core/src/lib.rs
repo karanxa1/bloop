@@ -6,6 +6,8 @@ mod crypto;
 mod db;
 mod ledger;
 mod mcp;
+mod sandbox;
+mod workspace;
 
 use config::Config;
 use serde_json::{json, Value};
@@ -111,6 +113,10 @@ async fn route_authed(
         };
     }
 
+    if let Some(rest) = path.strip_prefix("/api/workspace/") {
+        return workspace_route(req, &env, user_id, rest, method).await;
+    }
+
     match (&method, path) {
         (&Method::Post, "/api/chat") => chat(req, env, user_id, persist).await,
         (&Method::Get, "/api/models") => models_list(),
@@ -175,6 +181,13 @@ async fn chat(mut req: Request, env: Env, user_id: &str, persist: bool) -> Resul
     if !config::model_allowed(&model) {
         return json_err("unknown model", 400);
     }
+    let mode = match body.get("mode") {
+        None | Some(Value::Null) => agent::Mode::Default,
+        Some(v) => match v.as_str().and_then(agent::Mode::parse) {
+            Some(m) => m,
+            None => return json_err("unknown mode", 400),
+        },
+    };
 
     // Resolve or create the conversation.
     let conversation_id = if persist {
@@ -214,6 +227,7 @@ async fn chat(mut req: Request, env: Env, user_id: &str, persist: bool) -> Resul
         persist,
         message,
         model,
+        mode,
     });
 
     let headers = Headers::new();
@@ -429,6 +443,75 @@ async fn servers_add(mut req: Request, env: &Env, user_id: &str) -> Result<Respo
 async fn servers_delete(env: &Env, user_id: &str, id: &str) -> Result<Response> {
     db::delete_user_server(env, user_id, id).await?;
     Response::from_json(&json!({"ok": true}))
+}
+
+// ---------- workspaces ----------
+
+/// Files listed by the editor per request.
+const WORKSPACE_FILES_MAX: usize = 2000;
+
+/// `/api/workspace/:conv/{files,file,exec}` — the conversation must belong to the caller.
+async fn workspace_route(
+    mut req: Request,
+    env: &Env,
+    user_id: &str,
+    rest: &str,
+    method: Method,
+) -> Result<Response> {
+    let Some((conv, action)) = rest.trim_matches('/').split_once('/') else {
+        return json_err("not found", 404);
+    };
+    if db::get_conversation(env, user_id, conv).await?.is_none() {
+        return json_err("conversation not found", 404);
+    }
+    let query_path = req
+        .url()?
+        .query_pairs()
+        .find(|(k, _)| k == "path")
+        .map(|(_, v)| v.into_owned())
+        .unwrap_or_default();
+    let ws_err = |e: workspace::WsError| json_err(&e.message, e.status);
+    match (method, action) {
+        (Method::Get, "files") => match workspace::list(env, conv, "", WORKSPACE_FILES_MAX).await {
+            Ok((entries, _)) => Response::from_json(&workspace::entries_json(&entries)),
+            Err(e) => ws_err(e),
+        },
+        (Method::Get, "file") => match workspace::read_text(env, conv, &query_path).await {
+            Ok(content) => Response::from_json(&json!({"path": query_path, "content": content})),
+            Err(e) => ws_err(e),
+        },
+        (Method::Put, "file") => {
+            let body: Value = req.json().await.unwrap_or_else(|_| json!({}));
+            let (Some(path), Some(content)) = (
+                body.get("path").and_then(|v| v.as_str()),
+                body.get("content").and_then(|v| v.as_str()),
+            ) else {
+                return json_err("path and content (string) required", 400);
+            };
+            match workspace::write(env, conv, path, content).await {
+                Ok(()) => Response::from_json(&json!({"ok": true})),
+                Err(e) => ws_err(e),
+            }
+        }
+        (Method::Delete, "file") => match workspace::delete(env, conv, &query_path).await {
+            Ok(()) => Response::from_json(&json!({"ok": true})),
+            Err(e) => ws_err(e),
+        },
+        (Method::Post, "exec") => {
+            let body: Value = req.json().await.unwrap_or_else(|_| json!({}));
+            let command = body.get("command").and_then(|v| v.as_str()).unwrap_or("").trim();
+            if command.is_empty() {
+                return json_err("command required", 400);
+            }
+            let timeout_s = body.get("timeout_s").and_then(|v| v.as_u64());
+            let cfg = Config::from_env(env);
+            match workspace::exec(env, &cfg, conv, command, timeout_s).await {
+                Ok((status, v)) => Ok(Response::from_json(&v)?.with_status(status)),
+                Err(e) => json_err(&e, 502),
+            }
+        }
+        _ => json_err("not found", 404),
+    }
 }
 
 // ---------- files (R2) ----------

@@ -18,16 +18,16 @@ export function ToolCallCard({ call }: { call: ToolCall }) {
     (call.output != null && call.output !== "");
 
   return (
-    <div className="my-2 overflow-hidden rounded-lg border border-neutral-200 bg-white text-sm shadow-sm">
+    <div className="my-2 overflow-hidden border border-neutral-200 border-l-2 border-l-bloop bg-white text-sm">
       <div className="flex items-center gap-2 px-3 py-2">
-        <span className="text-neutral-500">
+        <span className="text-bloop-deep">
           <WrenchIcon className="h-3.5 w-3.5" />
         </span>
         <span className="font-mono text-xs font-semibold text-neutral-800">
           {call.name}
         </span>
         {call.app && (
-          <span className="rounded-full bg-bloop/20 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-bloop-deep">
+          <span className="rounded-full bg-bloop px-2 py-0.5 text-[10px] font-semibold tracking-wide text-white">
             {call.app}
           </span>
         )}
@@ -69,10 +69,10 @@ export function ToolCallCard({ call }: { call: ToolCall }) {
       </div>
 
       {open && hasDetails && (
-        <div className="border-t border-neutral-100 bg-neutral-50 px-3 py-2">
+        <div className="border-t border-neutral-100 bg-page px-3 py-2">
           {call.args != null && pretty(call.args) !== "{}" && (
             <div className="mb-1.5">
-              <div className="text-[10px] font-semibold uppercase tracking-wide text-neutral-400">
+              <div className="text-[10px] font-semibold tracking-wide text-neutral-400">
                 args
               </div>
               <pre className="mt-0.5 max-h-40 overflow-auto whitespace-pre-wrap break-all font-mono text-[11px] leading-relaxed text-neutral-700 scroll-thin">
@@ -82,7 +82,7 @@ export function ToolCallCard({ call }: { call: ToolCall }) {
           )}
           {call.output != null && call.output !== "" && (
             <div>
-              <div className="text-[10px] font-semibold uppercase tracking-wide text-neutral-400">
+              <div className="text-[10px] font-semibold tracking-wide text-neutral-400">
                 output
               </div>
               <pre className="mt-0.5 max-h-40 overflow-auto whitespace-pre-wrap break-all font-mono text-[11px] leading-relaxed text-neutral-700 scroll-thin">

@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { memo, useEffect, useRef } from "react";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import type { ChatMessage } from "../types";
@@ -6,9 +6,18 @@ import { ToolCallCard } from "./ToolCallCard";
 import { AlertIcon, BlobIcon } from "../icons";
 
 const SUGGESTIONS = [
-  "list my github repos, pick the most recently pushed, and create an issue there summarizing what it needs next — then verify it exists",
-  "check slack for unread mentions, post a short digest to #general, and verify it landed",
-  "create a notion page with today's standup notes, then read it back to confirm"
+  {
+    label: "act on github",
+    text: "list my github repos, pick the most recently pushed, and create an issue there summarizing what it needs next — then verify it exists"
+  },
+  {
+    label: "research + file",
+    text: "research cloudflare/agents on deepwiki, file a github issue in karanxa1/bloop-evals summarizing it, then verify it and report the link"
+  },
+  {
+    label: "prove failure honesty",
+    text: "create an issue in nonexistent-owner-xyz/definitely-not-a-repo-123 — show me exactly what happens"
+  }
 ];
 
 interface MessageListProps {
@@ -48,7 +57,7 @@ export function MessageList({ messages, streaming, onSuggestion }: MessageListPr
             <MessageBubble key={m.id} message={m} />
           ))}
           {streaming && (
-            <div className="mb-4 flex items-center gap-2 text-xs text-neutral-400">
+            <div className="mb-4 flex items-center gap-2 text-xs font-medium text-bloop-deep">
               <span className="h-1.5 w-1.5 rounded-full bg-bloop motion-safe:animate-pulse" />
               bloop is working…
             </div>
@@ -61,31 +70,69 @@ export function MessageList({ messages, streaming, onSuggestion }: MessageListPr
 
 function EmptyState({ onSuggestion }: { onSuggestion: (t: string) => void }) {
   return (
-    <div className="mx-auto flex h-full max-w-2xl flex-col items-center justify-center px-6 text-center">
-      <BlobIcon className="h-14 w-14" />
-      <h1 className="mt-3 font-wordmark text-4xl font-bold text-bloop-deep">
-        bloop
-      </h1>
-      <p className="mt-2 text-sm text-neutral-500">
-        a general agent that acts across your apps — and proves every step.
-      </p>
-      <div className="mt-8 flex w-full flex-col gap-2">
-        {SUGGESTIONS.map((s) => (
-          <button
-            key={s}
-            type="button"
-            onClick={() => onSuggestion(s)}
-            className="rounded-xl border border-neutral-200 bg-white px-4 py-3 text-left text-sm text-neutral-700 shadow-sm transition-colors hover:border-bloop hover:text-bloop-deep focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-bloop-deep"
-          >
-            {s}
-          </button>
-        ))}
+    <div className="flex h-full flex-col">
+      {/* hero panel — same language as the landing hero */}
+      <div className="relative flex min-h-[46%] shrink-0 items-end overflow-hidden bg-bloop">
+        <img
+          src="/assets/hero.jpg"
+          alt=""
+          aria-hidden="true"
+          className="absolute inset-0 h-full w-full object-cover opacity-40 motion-safe:scale-[1.03]"
+        />
+        <div className="absolute inset-0 bg-bloop/50" aria-hidden="true" />
+        <svg
+          className="pointer-events-none absolute -right-20 -top-24 h-80 w-80 text-white/20"
+          viewBox="0 0 200 200"
+          fill="none"
+          aria-hidden="true"
+        >
+          <circle cx="100" cy="100" r="45" stroke="currentColor" />
+          <circle cx="100" cy="100" r="75" stroke="currentColor" />
+          <circle cx="100" cy="100" r="100" stroke="currentColor" />
+        </svg>
+        <div className="relative px-6 pb-8 sm:px-10">
+          <div className="motion-safe:rise flex items-end gap-3">
+            <BlobIcon className="h-12 w-12" />
+            <h1 className="sticker font-wordmark text-7xl font-extrabold leading-[0.9] text-bloop sm:text-8xl">
+              bloop
+            </h1>
+          </div>
+          <p className="motion-safe:rise mt-3 max-w-md text-sm font-medium leading-relaxed text-white [animation-delay:120ms]">
+            a general agent that acts across your apps — and proves every step.
+            plan it, run it, verify it.
+          </p>
+        </div>
+      </div>
+
+      {/* suggestion cards — white on lime-grey, like landing features */}
+      <div className="flex-1 bg-page px-6 py-6 sm:px-10">
+        <p className="text-[11px] font-semibold text-neutral-500">
+          try one — watch the proof trace on the right
+        </p>
+        <div className="mt-3 grid gap-3 sm:grid-cols-3">
+          {SUGGESTIONS.map((s, i) => (
+            <button
+              key={s.label}
+              type="button"
+              onClick={() => onSuggestion(s.text)}
+              style={{ animationDelay: `${i * 75}ms` }}
+              className="motion-safe:rise border border-neutral-200 bg-white px-4 py-3 text-left transition-transform duration-150 hover:-translate-y-0.5 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-bloop-deep"
+            >
+              <span className="block font-wordmark text-base font-bold text-bloop-deep">
+                {s.label}
+              </span>
+              <span className="mt-1 block text-xs leading-relaxed text-neutral-500">
+                {s.text}
+              </span>
+            </button>
+          ))}
+        </div>
       </div>
     </div>
   );
 }
 
-function MessageBubble({ message }: { message: ChatMessage }) {
+const MessageBubble = memo(function MessageBubble({ message }: { message: ChatMessage }) {
   if (message.role === "user") {
     const text = message.parts
       .filter((p) => p.kind === "text")
@@ -93,7 +140,7 @@ function MessageBubble({ message }: { message: ChatMessage }) {
       .join("");
     return (
       <div className="mb-4 flex justify-end">
-        <div className="max-w-[85%] whitespace-pre-wrap break-words rounded-2xl rounded-br-md bg-neutral-800 px-4 py-2.5 text-sm leading-relaxed text-white sm:max-w-[75%]">
+        <div className="max-w-[85%] whitespace-pre-wrap break-words bg-bloop-deep px-4 py-2.5 text-sm leading-relaxed text-white sm:max-w-[75%]">
           {text}
         </div>
       </div>
@@ -116,7 +163,7 @@ function MessageBubble({ message }: { message: ChatMessage }) {
           );
         })}
         {message.error && (
-          <div className="mt-2 flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+          <div className="mt-2 flex items-start gap-2 border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
             <AlertIcon className="mt-0.5 h-4 w-4 shrink-0" />
             <span>{message.error}</span>
           </div>
@@ -124,4 +171,4 @@ function MessageBubble({ message }: { message: ChatMessage }) {
       </div>
     </div>
   );
-}
+});

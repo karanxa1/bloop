@@ -32,10 +32,10 @@ export function ProofTrace({ plan, trace, verifyCount, onClose }: ProofTraceProp
   return (
     <div className="flex h-full flex-col">
       {/* header / counters */}
-      <div className="border-b border-neutral-200 px-4 py-3">
+      <div className="border-b border-neutral-200 bg-bloop/10 px-4 py-3">
         <div className="flex items-center gap-2">
           <ShieldCheckIcon className="h-4 w-4 text-bloop-deep" />
-          <h2 className="text-xs font-bold uppercase tracking-wider text-bloop-deep">
+          <h2 className="font-wordmark text-base font-bold leading-none text-bloop-deep">
             proof trace
           </h2>
           {onClose && (
@@ -65,7 +65,7 @@ export function ProofTrace({ plan, trace, verifyCount, onClose }: ProofTraceProp
         {/* plan */}
         {plan.length > 0 && (
           <section className="border-b border-neutral-100 px-4 py-3" aria-label="plan">
-            <h3 className="mb-2 text-[10px] font-bold uppercase tracking-wider text-neutral-400">
+            <h3 className="mb-2 font-wordmark text-xs font-bold text-bloop-deep/70">
               plan
             </h3>
             <ol className="space-y-1.5">
@@ -96,7 +96,7 @@ export function ProofTrace({ plan, trace, verifyCount, onClose }: ProofTraceProp
 
         {/* trace feed */}
         <section className="px-4 py-3" aria-label="trace feed">
-          <h3 className="mb-2 text-[10px] font-bold uppercase tracking-wider text-neutral-400">
+          <h3 className="mb-2 font-wordmark text-xs font-bold text-bloop-deep/70">
             trace
           </h3>
           {trace.length === 0 ? (
@@ -123,14 +123,14 @@ export function ProofTrace({ plan, trace, verifyCount, onClose }: ProofTraceProp
 function ToolTraceRow({ call }: { call: ToolCall }) {
   const isMutating = MUTATING.test(call.name);
   return (
-    <li className="rounded-md border border-neutral-200 bg-neutral-50 px-2.5 py-1.5">
+    <li className="border border-neutral-200 border-l-2 border-l-bloop bg-white px-2.5 py-1.5">
       <div className="flex items-center gap-1.5">
         <WrenchIcon className="h-3 w-3 text-neutral-400" />
         <span className="min-w-0 flex-1 truncate font-mono text-[11px] font-medium text-neutral-700">
           {call.name}
         </span>
         {call.app && (
-          <span className="rounded-full bg-bloop/20 px-1.5 py-px text-[9px] font-semibold uppercase text-bloop-deep">
+          <span className="rounded-full bg-bloop px-1.5 py-px text-[9px] font-semibold text-white">
             {call.app}
           </span>
         )}
@@ -153,7 +153,7 @@ function ToolTraceRow({ call }: { call: ToolCall }) {
 
 function VerifyTraceRow({ entry }: { entry: VerifyEntry }) {
   return (
-    <li className="rounded-md border border-bloop/40 bg-bloop/10 px-2.5 py-1.5">
+    <li className="border border-bloop/50 border-l-2 border-l-bloop-deep bg-bloop/10 px-2.5 py-1.5">
       <div className="flex items-start gap-1.5">
         <ShieldCheckIcon className="mt-px h-3.5 w-3.5 shrink-0 text-bloop-deep" />
         <span className="min-w-0 flex-1 text-[11px] font-medium leading-snug text-bloop-deep">
@@ -162,7 +162,7 @@ function VerifyTraceRow({ entry }: { entry: VerifyEntry }) {
       </div>
       <div className="mt-1 flex items-center gap-2 pl-5">
         {entry.app && (
-          <span className="rounded-full bg-white/70 px-1.5 py-px text-[9px] font-semibold uppercase text-bloop-deep">
+          <span className="rounded-full bg-bloop-deep px-1.5 py-px text-[9px] font-semibold text-white">
             {entry.app}
           </span>
         )}

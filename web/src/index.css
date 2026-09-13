@@ -14,6 +14,27 @@ body,
   height: 100%;
 }
 
+/* ── brand motion ─────────────────────────────────────────────── */
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@utility rise {
+  animation: rise 0.55s ease-out both;
+}
+
+/* green wordmark with white sticker outline (landing-page treatment) */
+.sticker {
+  -webkit-text-stroke: 0.14em #fff;
+  paint-order: stroke fill;
+}
+
 body {
   background-color: var(--color-page);
   font-family: var(--font-sans);

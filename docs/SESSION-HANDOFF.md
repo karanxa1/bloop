@@ -31,7 +31,7 @@ gpt-5.6 family only · sandbox via SANDBOX service binding only · never deploy 
 | ui-c | marketplace/* | apps/tools/skills UI against contracts |
 | ui-d | workspace panel | **done** (committed files; App.tsx wiring uncommitted) |
 | ui-e | landing + tokens | **done** |
-| voice | core/src/voice.rs, web/components/voice/* | deepgram voice agent orb, WS relay `/api/voice/ws`, `run_bloop_task` function |
+| voice | core/src/voice.rs, web/components/voice/* | **done** (files committed; lib.rs `mod voice` + route and App.tsx mount uncommitted; vite dev proxy needs `ws: true`; models flux-general-en / claude-sonnet-5 / sonic-3.6 verified) |
 
 ## next steps (in order)
 1. Wait for agents; then `cd core && cargo check --target wasm32-unknown-unknown && cargo test` and `cd web && npm run build` green. Fix integration gaps (sandbox_id contract into sandbox.rs; ADMIN_EMAILS var `karan@bloop.dev` in wrangler.toml vars; CSP `connect-src 'self'` for voice relay; mic Permissions-Policy).

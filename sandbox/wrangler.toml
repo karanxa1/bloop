@@ -13,6 +13,11 @@ CF_ACCOUNT_ID = "337c662fed500c2dff530141baaf75c9"
 [browser]
 binding = "BROWSER"
 
+# Workspace source of truth: objects at ws/<workspace>/<relative path>.
+[[r2_buckets]]
+binding = "FILES"
+bucket_name = "bloop-files"
+
 # Readability / Turndown browser builds are bundled as source text and
 # evaluated inside the rendered page by /browser/fetch.
 [[rules]]
@@ -23,7 +28,9 @@ fallthrough = true
 [[containers]]
 class_name = "Sandbox"
 image = "./Dockerfile"
-instance_type = "lite"
+# standard-1 (1/2 vCPU, 4 GiB, 8 GB disk): workspaces run npm/pip installs and
+# builds that OOM on lite (256 MiB). Billed only while awake; CPU on active use.
+instance_type = "standard-1"
 max_instances = 1
 
 [[durable_objects.bindings]]

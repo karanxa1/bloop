@@ -11,6 +11,8 @@ export { Sandbox } from "@cloudflare/sandbox";
 interface Env {
 	Sandbox: DurableObjectNamespace<Sandbox>;
 	BROWSER: BrowserWorker;
+	/** Durable workspace files, keyed `ws/<workspace>/<relative path>`. */
+	FILES: R2Bucket;
 	SANDBOX_TOKEN: string;
 	/** Account that owns the Browser Rendering sessions (wrangler.toml [vars]). */
 	CF_ACCOUNT_ID?: string;
@@ -133,8 +135,12 @@ async function handleRun(request: Request, env: Env): Promise<Response> {
 	}
 
 	const started = Date.now();
+	const container = getSandbox(env.Sandbox, "default");
+	let sessionId: string | undefined;
 	try {
-		const sandbox = getSandbox(env.Sandbox, "default");
+		// Own shell session so concurrent runs don't collide in the default one.
+		const sandbox = await container.createSession({ id: `run-${crypto.randomUUID()}` });
+		sessionId = sandbox.id;
 		// Unique path per request so concurrent runs can't clobber each other.
 		const path = `/tmp/snippet-${crypto.randomUUID()}.${lang.ext}`;
 		await sandbox.writeFile(path, body.code);
@@ -153,6 +159,8 @@ async function handleRun(request: Request, env: Env): Promise<Response> {
 		});
 	} catch (err) {
 		return json({ error: `execution failed: ${errorMessage(err)}` }, 500);
+	} finally {
+		if (sessionId) await container.deleteSession(sessionId).catch(() => {});
 	}
 }
 
@@ -479,11 +487,326 @@ async function handleBrowserClose(request: Request, env: Env): Promise<Response>
 }
 
 // ---------------------------------------------------------------------------
+// /workspace/exec — R2 is the source of truth; the container is a cache that
+// is hydrated before and synced back after each command.
+// ---------------------------------------------------------------------------
+
+/** A dedicated shell session per request: concurrent execs sharing the
+ *  default session fail inside the container. */
+type SandboxStub = Awaited<ReturnType<ReturnType<typeof getSandbox>["createSession"]>>;
+/** relative path -> R2 etag of the version present on the container disk */
+type Manifest = Record<string, string>;
+
+const WORKSPACE_RE = /^[A-Za-z0-9_-]{1,64}$/;
+const WS_ROOT = "/workspace";
+const WS_PREFIX = "ws/";
+const WS_DEFAULT_TIMEOUT_S = 60;
+const WS_MAX_TIMEOUT_S = 300;
+const WS_MAX_SYNC_FILES = 300;
+const WS_MAX_SYNC_BYTES = 1024 * 1024;
+/** Hydration reads objects into worker memory as base64; keep it bounded. */
+const WS_MAX_HYDRATE_BYTES = 5 * 1024 * 1024;
+const WS_IO_CONCURRENCY = 6;
+const WS_SKIP_DIRS = new Set(["node_modules", ".git", ".bloop", "__pycache__", ".venv"]);
+/** How long an exec waits for a concurrent exec on the same workspace. */
+const WS_LOCK_WAIT_S = WS_MAX_TIMEOUT_S + 90;
+/** A lock older than this is from a crashed exec and is broken. */
+const WS_LOCK_STALE_MIN = 12;
+const PATH_CHUNK = 200;
+
+function shq(s: string): string {
+	return `'${s.replace(/'/g, `'\\''`)}'`;
+}
+
+function chunk<T>(items: T[], size: number): T[][] {
+	const out: T[][] = [];
+	for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size));
+	return out;
+}
+
+async function mapLimit<T>(items: T[], limit: number, fn: (item: T) => Promise<void>): Promise<void> {
+	let next = 0;
+	const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
+		while (next < items.length) await fn(items[next++]);
+	});
+	await Promise.all(workers);
+}
+
+/** Paths we never sync back (dependency/build caches, VCS, our own metadata). */
+function inSkippedDir(rel: string): boolean {
+	return rel.split("/").slice(0, -1).some((seg) => WS_SKIP_DIRS.has(seg));
+}
+
+/** R2 keys must map to a safe relative path inside the workspace dir. */
+function safeRelPath(rel: string): boolean {
+	if (!rel || rel.endsWith("/") || rel.startsWith("/") || /[\0\n\r\t]/.test(rel)) return false;
+	const segs = rel.split("/");
+	return !segs.some((s) => s === "" || s === "." || s === "..") && segs[0] !== ".bloop";
+}
+
+async function sh(sandbox: SandboxStub, script: string, timeoutMs = 60_000) {
+	return sandbox.exec(`bash -c ${shq(script)}`, { timeout: timeoutMs });
+}
+
+async function readManifest(sandbox: SandboxStub, dir: string): Promise<Manifest> {
+	try {
+		const res = await sandbox.readFile(`${dir}/.bloop/manifest.json`);
+		const parsed: unknown = JSON.parse(res.content);
+		if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) return parsed as Manifest;
+	} catch {
+		// Missing (fresh or restarted container) or corrupt — rehydrate fully.
+	}
+	return {};
+}
+
+async function writeManifest(sandbox: SandboxStub, dir: string, manifest: Manifest): Promise<void> {
+	await sandbox.writeFile(`${dir}/.bloop/manifest.json`, JSON.stringify(manifest));
+}
+
+const FIND_PRUNE = `\\( -type d \\( ${[...WS_SKIP_DIRS].map((d) => `-name ${shq(d)}`).join(" -o ")} \\) -prune \\)`;
+
+/** Serialize execs per workspace across isolates: atomic mkdir lock inside the
+ *  (single-instance) container, broken if older than WS_LOCK_STALE_MIN. */
+async function acquireWorkspaceLock(sandbox: SandboxStub, workspace: string): Promise<string> {
+	const lock = `${WS_ROOT}/.locks/${workspace}`;
+	const script =
+		`mkdir -p ${WS_ROOT}/.locks; ` +
+		`for i in $(seq 1 ${WS_LOCK_WAIT_S}); do ` +
+		`find ${shq(lock)} -maxdepth 0 -mmin +${WS_LOCK_STALE_MIN} -exec rmdir {} \\; 2>/dev/null; ` +
+		`mkdir ${shq(lock)} 2>/dev/null && exit 0; sleep 1; done; exit 75`;
+	const res = await sh(sandbox, script, (WS_LOCK_WAIT_S + 30) * 1000);
+	if (res.exitCode !== 0) {
+		throw new HttpError(409, `workspace is busy: another exec has held it for over ${WS_LOCK_WAIT_S}s`);
+	}
+	return lock;
+}
+
+interface HydrateResult {
+	manifest: Manifest;
+	skipped: string[];
+}
+
+async function hydrateWorkspace(
+	sandbox: SandboxStub,
+	bucket: R2Bucket,
+	workspace: string,
+	dir: string,
+): Promise<HydrateResult> {
+	const prefix = `${WS_PREFIX}${workspace}/`;
+	const remote = new Map<string, R2Object>();
+	const skipped: string[] = [];
+	let cursor: string | undefined;
+	do {
+		const page = await bucket.list({ prefix, cursor, limit: 1000 });
+		for (const obj of page.objects) {
+			const rel = obj.key.slice(prefix.length);
+			if (!safeRelPath(rel)) {
+				skipped.push(rel);
+				continue;
+			}
+			remote.set(rel, obj);
+		}
+		cursor = page.truncated ? page.cursor : undefined;
+	} while (cursor);
+
+	// Which files actually exist locally (catches a manifest that outlived its files).
+	const scan = await sh(sandbox, `mkdir -p ${shq(`${dir}/.bloop`)} && cd ${shq(dir)} && find . ${FIND_PRUNE} -o -type f -printf '%P\\n'`);
+	if (scan.exitCode !== 0) throw new Error(`workspace scan failed: ${scan.stderr.slice(0, 300)}`);
+	const local = new Set(scan.stdout.split("\n").filter(Boolean));
+	const manifest = await readManifest(sandbox, dir);
+
+	const removed = Object.keys(manifest).filter((rel) => !remote.has(rel));
+	for (const paths of chunk(removed, PATH_CHUNK)) {
+		await sh(sandbox, `cd ${shq(dir)} && rm -f -- ${paths.map(shq).join(" ")}`);
+	}
+	for (const rel of removed) delete manifest[rel];
+
+	const stale = [...remote.entries()].filter(
+		([rel, obj]) => manifest[rel] !== obj.etag || (!local.has(rel) && !inSkippedDir(rel)),
+	);
+	const toFetch = stale.filter(([rel, obj]) => {
+		if (obj.size > WS_MAX_HYDRATE_BYTES) {
+			skipped.push(rel);
+			return false;
+		}
+		return true;
+	});
+
+	const parents = [...new Set(toFetch.map(([rel]) => rel.split("/").slice(0, -1).join("/")).filter(Boolean))];
+	for (const dirs of chunk(parents, PATH_CHUNK)) {
+		await sh(sandbox, `cd ${shq(dir)} && mkdir -p -- ${dirs.map(shq).join(" ")}`);
+	}
+
+	await mapLimit(toFetch, WS_IO_CONCURRENCY, async ([rel, obj]) => {
+		const body = await bucket.get(obj.key);
+		if (!body) return; // deleted between list and get
+		const b64 = Buffer.from(await body.arrayBuffer()).toString("base64");
+		await sandbox.writeFile(`${dir}/${rel}`, b64, { encoding: "base64" });
+		manifest[rel] = body.etag;
+	});
+
+	if (removed.length > 0 || toFetch.length > 0) await writeManifest(sandbox, dir, manifest);
+	return { manifest, skipped };
+}
+
+interface SyncResult {
+	changed: string[];
+	deleted: string[];
+	skipped: string[];
+}
+
+async function syncWorkspace(
+	sandbox: SandboxStub,
+	bucket: R2Bucket,
+	workspace: string,
+	dir: string,
+	manifest: Manifest,
+): Promise<SyncResult> {
+	const prefix = `${WS_PREFIX}${workspace}/`;
+	const scan = await sh(
+		sandbox,
+		`cd ${shq(dir)} && find . ${FIND_PRUNE} -o -type f \\( -newer .bloop/marker -printf 'M\\t%s\\t%P\\n' -o -printf 'U\\t%s\\t%P\\n' \\)`,
+	);
+	if (scan.exitCode !== 0) throw new Error(`workspace scan failed: ${scan.stderr.slice(0, 300)}`);
+
+	const local = new Set<string>();
+	const candidates: { rel: string; size: number }[] = [];
+	for (const line of scan.stdout.split("\n")) {
+		const [flag, size, rel] = line.split("\t");
+		if (!rel || (flag !== "M" && flag !== "U")) continue;
+		local.add(rel);
+		// Modified after the marker, or new to the manifest (e.g. mtime-preserving copies).
+		if (flag === "M" || !(rel in manifest)) candidates.push({ rel, size: Number(size) });
+	}
+	candidates.sort((a, b) => a.rel.localeCompare(b.rel));
+
+	const skipped: string[] = [];
+	const toUpload: string[] = [];
+	for (const { rel, size } of candidates) {
+		if (!safeRelPath(rel) || size > WS_MAX_SYNC_BYTES || toUpload.length >= WS_MAX_SYNC_FILES) skipped.push(rel);
+		else toUpload.push(rel);
+	}
+
+	const changed: string[] = [];
+	await mapLimit(toUpload, WS_IO_CONCURRENCY, async (rel) => {
+		try {
+			const file = await sandbox.readFile(`${dir}/${rel}`, { encoding: "base64" });
+			const bytes = Buffer.from(file.content, file.encoding === "utf-8" ? "utf8" : "base64");
+			const put = await bucket.put(`${prefix}${rel}`, bytes, {
+				httpMetadata: file.mimeType ? { contentType: file.mimeType } : undefined,
+			});
+			manifest[rel] = put.etag;
+			changed.push(rel);
+		} catch {
+			skipped.push(rel); // vanished or unreadable mid-sync
+		}
+	});
+	changed.sort();
+
+	const deleted = Object.keys(manifest)
+		.filter((rel) => !local.has(rel) && !inSkippedDir(rel))
+		.sort();
+	for (const keys of chunk(deleted, 1000)) {
+		await bucket.delete(keys.map((rel) => `${prefix}${rel}`));
+	}
+	for (const rel of deleted) delete manifest[rel];
+
+	if (changed.length > 0 || deleted.length > 0) await writeManifest(sandbox, dir, manifest);
+	return { changed, deleted, skipped };
+}
+
+async function handleWorkspaceExec(request: Request, env: Env): Promise<Response> {
+	const body = await readJson(request);
+	const workspace = body.workspace;
+	if (typeof workspace !== "string" || !WORKSPACE_RE.test(workspace)) {
+		throw new HttpError(400, "workspace must match ^[A-Za-z0-9_-]{1,64}$");
+	}
+	if (typeof body.command !== "string" || body.command.trim().length === 0) {
+		throw new HttpError(400, "command must be a non-empty string");
+	}
+	let timeoutS = WS_DEFAULT_TIMEOUT_S;
+	if (body.timeout_s !== undefined && body.timeout_s !== null) {
+		if (typeof body.timeout_s !== "number" || !Number.isFinite(body.timeout_s) || body.timeout_s <= 0) {
+			throw new HttpError(400, "timeout_s must be a positive number");
+		}
+		timeoutS = Math.min(Math.ceil(body.timeout_s), WS_MAX_TIMEOUT_S);
+	}
+
+	const started = Date.now();
+	const container = getSandbox(env.Sandbox, "default");
+	const dir = `${WS_ROOT}/${workspace}`;
+	let sandbox: SandboxStub;
+	try {
+		sandbox = await container.createSession({ id: `ws-${crypto.randomUUID()}` });
+	} catch (err) {
+		throw new HttpError(500, `failed to create workspace session: ${errorMessage(err)}`);
+	}
+	let lock: string;
+	try {
+		lock = await acquireWorkspaceLock(sandbox, workspace);
+	} catch (err) {
+		await container.deleteSession(sandbox.id).catch(() => {});
+		if (err instanceof HttpError) throw err;
+		throw new HttpError(500, `workspace lock failed: ${errorMessage(err)}`);
+	}
+
+	try {
+		let hydrated: HydrateResult;
+		try {
+			hydrated = await hydrateWorkspace(sandbox, env.FILES, workspace, dir);
+		} catch (err) {
+			throw new HttpError(500, `workspace hydration failed: ${errorMessage(err)}`);
+		}
+
+		const scriptPath = `/tmp/bloop-ws-${crypto.randomUUID()}.sh`;
+		let result;
+		try {
+			await sandbox.writeFile(scriptPath, body.command);
+			result = await sh(
+				sandbox,
+				`cd ${shq(dir)} && touch .bloop/marker && ` +
+					`timeout --signal=TERM --kill-after=5 ${timeoutS} bash ${shq(scriptPath)}; ` +
+					`code=$?; rm -f ${shq(scriptPath)}; exit $code`,
+				(timeoutS + 30) * 1000,
+			);
+		} catch (err) {
+			throw new HttpError(500, `execution failed: ${errorMessage(err)}`);
+		}
+		const { stdout, stderr } = capOutput(result.stdout ?? "", result.stderr ?? "");
+
+		const response: Record<string, unknown> = {
+			stdout,
+			stderr: result.exitCode === 124 ? `${stderr}\n[timed out after ${timeoutS}s]` : stderr,
+			exit_code: result.exitCode,
+			ms: 0,
+			changed: [] as string[],
+			deleted: [] as string[],
+		};
+		const skipped = [...hydrated.skipped];
+		try {
+			const synced = await syncWorkspace(sandbox, env.FILES, workspace, dir, hydrated.manifest);
+			response.changed = synced.changed;
+			response.deleted = synced.deleted;
+			skipped.push(...synced.skipped);
+		} catch (err) {
+			response.sync_error = `sync back to storage failed: ${errorMessage(err)}`;
+		}
+		if (skipped.length > 0) response.skipped = skipped;
+		response.ms = Date.now() - started;
+		return json(response);
+	} finally {
+		await sh(sandbox, `rmdir ${shq(lock)} 2>/dev/null; true`).catch(() => {});
+		await container.deleteSession(sandbox.id).catch(() => {});
+	}
+}
+
+// ---------------------------------------------------------------------------
 // Router
 // ---------------------------------------------------------------------------
 
 const POST_ROUTES: Record<string, (request: Request, env: Env) => Promise<Response>> = {
 	"/run": handleRun,
+	"/workspace/exec": handleWorkspaceExec,
 	"/browser/fetch": handleBrowserFetch,
 	"/browser/session": handleBrowserSession,
 	"/browser/handoff": handleBrowserHandoff,

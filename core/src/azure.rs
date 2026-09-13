@@ -123,48 +123,136 @@ pub async fn post_json(url: &str, headers: &[(&str, &str)], body: &Value) -> Res
         .map_err(|e| Error::RustError(format!("parse {}: {} | {}", url, e, &text[..text.len().min(300)])))
 }
 
-/// Generate an image via the Azure gpt-image deployment.
-/// Returns `(bytes, ext)` where ext is "webp" or "png".
-///
-/// The 2025-04-01-preview spec only documents `output_format` png|jpeg (and
-/// `output_compression` for jpeg); newer gpt-image deployments accept webp, so
-/// we ask for webp first and retry once as plain png on HTTP 400.
+const IMAGE_DEPLOYMENT: &str = "gpt-image-2.5-flare";
+const IMAGE_API_VERSION: &str = "2025-04-01-preview";
+
+fn images_url(cfg: &Config, op: &str) -> String {
+    format!(
+        "{}/openai/deployments/{}/images/{}?api-version={}",
+        cfg.azure_endpoint, IMAGE_DEPLOYMENT, op, IMAGE_API_VERSION
+    )
+}
+
+fn head(s: &str) -> String {
+    s.chars().take(300).collect()
+}
+
+/// Decode the first `b64_json` image of an images response.
+fn first_image(resp: &Value) -> Result<Vec<u8>> {
+    let b64 = resp
+        .pointer("/data/0/b64_json")
+        .and_then(|b| b.as_str())
+        .ok_or_else(|| Error::RustError(format!("image response missing b64_json: {}", head(&resp.to_string()))))?;
+    base64::engine::general_purpose::STANDARD
+        .decode(b64)
+        .map_err(|e| Error::RustError(format!("b64 decode: {}", e)))
+}
+
+/// Generate a JPEG via the gpt-image deployment; returns `(bytes, "jpg")`.
+/// `output_format` accepts only png|jpeg (webp is rejected), and
+/// `output_compression` applies to jpeg.
 pub async fn generate_image(cfg: &Config, prompt: &str, size: &str) -> Result<(Vec<u8>, &'static str)> {
-    let url = format!(
-        "{}/openai/deployments/gpt-image-2.5-flare/images/generations?api-version=2025-04-01-preview",
-        cfg.azure_endpoint
-    );
-    let mut body = json!({
+    let body = json!({
         "prompt": prompt,
         "size": if size.is_empty() { "1024x1024" } else { size },
         "quality": "high",
         "n": 1,
-        "output_format": "webp",
+        "output_format": "jpeg",
         "output_compression": 85,
     });
-    let headers = [("api-key", cfg.azure_key.as_str())];
-    let (resp, ext) = match post_json(&url, &headers, &body).await {
-        Ok(v) => (v, "webp"),
-        Err(e) if is_http_400(&e) => {
-            console_log!("image webp rejected, retrying as png: {}", e);
-            if let Some(o) = body.as_object_mut() {
-                o.remove("output_format");
-                o.remove("output_compression");
-            }
-            (post_json(&url, &headers, &body).await?, "png")
-        }
-        Err(e) => return Err(e),
-    };
-    let b64 = resp
-        .get("data")
-        .and_then(|d| d.get(0))
-        .and_then(|d| d.get("b64_json"))
-        .and_then(|b| b.as_str())
-        .ok_or_else(|| Error::RustError(format!("image response missing b64_json: {}", &resp.to_string()[..300.min(resp.to_string().len())])))?;
-    base64::engine::general_purpose::STANDARD
-        .decode(b64)
-        .map(|bytes| (bytes, ext))
-        .map_err(|e| Error::RustError(format!("b64 decode: {}", e)))
+    let resp = post_json(&images_url(cfg, "generations"), &[("api-key", &cfg.azure_key)], &body).await?;
+    Ok((first_image(&resp)?, "jpg"))
+}
+
+/// MIME type of a PNG or JPEG image — the only inputs images/edits accepts.
+pub fn image_mime(bytes: &[u8]) -> Option<&'static str> {
+    if bytes.starts_with(b"\x89PNG\r\n\x1a\n") {
+        Some("image/png")
+    } else if bytes.starts_with(&[0xFF, 0xD8, 0xFF]) {
+        Some("image/jpeg")
+    } else {
+        None
+    }
+}
+
+/// A multipart/form-data body: text `fields`, then `files` as (field, filename, mime, bytes).
+fn multipart_body(boundary: &str, fields: &[(&str, &str)], files: &[(&str, &str, &str, &[u8])]) -> Vec<u8> {
+    let mut b = Vec::new();
+    for (name, value) in fields {
+        b.extend_from_slice(
+            format!("--{boundary}\r\nContent-Disposition: form-data; name=\"{name}\"\r\n\r\n{value}\r\n").as_bytes(),
+        );
+    }
+    for (name, filename, mime, data) in files {
+        b.extend_from_slice(
+            format!(
+                "--{boundary}\r\nContent-Disposition: form-data; name=\"{name}\"; filename=\"{filename}\"\r\nContent-Type: {mime}\r\n\r\n"
+            )
+            .as_bytes(),
+        );
+        b.extend_from_slice(data);
+        b.extend_from_slice(b"\r\n");
+    }
+    b.extend_from_slice(format!("--{boundary}--\r\n").as_bytes());
+    b
+}
+
+/// Edit a PNG/JPEG image with a prompt via images/edits (multipart upload);
+/// returns `(bytes, "jpg")`.
+pub async fn edit_image(cfg: &Config, image: &[u8], prompt: &str, size: &str) -> Result<(Vec<u8>, &'static str)> {
+    let mime = image_mime(image)
+        .ok_or_else(|| Error::RustError("input image must be PNG or JPEG".into()))?;
+    let filename = if mime == "image/png" { "input.png" } else { "input.jpg" };
+    let mut fields = vec![
+        ("prompt", prompt),
+        ("n", "1"),
+        ("quality", "high"),
+        ("output_format", "jpeg"),
+        ("output_compression", "85"),
+    ];
+    if !size.is_empty() {
+        fields.push(("size", size));
+    }
+    let boundary = format!("bloop{}", crate::crypto::uuid().replace('-', ""));
+    let body = multipart_body(&boundary, &fields, &[("image[]", filename, mime, image)]);
+
+    let headers = Headers::new();
+    headers.set("content-type", &format!("multipart/form-data; boundary={}", boundary))?;
+    headers.set("api-key", &cfg.azure_key)?;
+    let mut init = RequestInit::new();
+    init.with_method(Method::Post)
+        .with_headers(headers)
+        .with_body(Some(js_sys::Uint8Array::from(body.as_slice()).into()));
+    let url = images_url(cfg, "edits");
+    let mut resp = Fetch::Request(Request::new_with_init(&url, &init)?).send().await?;
+    let status = resp.status_code();
+    let text = resp.text().await.unwrap_or_default();
+    if status >= 400 {
+        return Err(Error::RustError(format!("POST {} → {}: {}", url, status, head(&text))));
+    }
+    let v: Value = serde_json::from_str(&text)
+        .map_err(|e| Error::RustError(format!("image edit parse: {} | {}", e, head(&text))))?;
+    Ok((first_image(&v)?, "jpg"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn multipart_layout() {
+        let body = multipart_body("B", &[("prompt", "hi \"x\"")], &[("image[]", "a.png", "image/png", b"\x89PNG")]);
+        let expected = b"--B\r\nContent-Disposition: form-data; name=\"prompt\"\r\n\r\nhi \"x\"\r\n\
+--B\r\nContent-Disposition: form-data; name=\"image[]\"; filename=\"a.png\"\r\nContent-Type: image/png\r\n\r\n\x89PNG\r\n--B--\r\n";
+        assert_eq!(body, expected.to_vec());
+    }
+
+    #[test]
+    fn sniffs_edit_input_formats() {
+        assert_eq!(image_mime(b"\x89PNG\r\n\x1a\nrest"), Some("image/png"));
+        assert_eq!(image_mime(&[0xFF, 0xD8, 0xFF, 0xE0]), Some("image/jpeg"));
+        assert_eq!(image_mime(b"RIFF\0\0\0\0WEBP"), None);
+    }
 }
 
 /// True when an error produced by `post_json` / the chat calls carries HTTP 400.

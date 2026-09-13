@@ -4,6 +4,7 @@ use crate::db;
 use crate::ledger;
 use crate::mcp::McpClient;
 use crate::workspace;
+use crate::{skills, tools_registry};
 use base64::Engine;
 use futures::channel::mpsc;
 use futures::future::{self, Either, LocalBoxFuture};
@@ -107,25 +108,6 @@ fn record(run_id: &str, t: &str, d: &Value) {
     ledger::record(run_id, e);
 }
 
-fn sanitize_name(s: &str) -> String {
-    let out: String = s
-        .chars()
-        .map(|c| {
-            if c.is_ascii_alphanumeric() || c == '-' || c == '_' {
-                c
-            } else {
-                '-'
-            }
-        })
-        .collect();
-    let out = out.trim_matches('-').to_string();
-    if out.is_empty() {
-        "server".to_string()
-    } else {
-        out
-    }
-}
-
 fn builtin_tools() -> Vec<Value> {
     vec![
         json!({
@@ -227,6 +209,50 @@ fn builtin_tools() -> Vec<Value> {
         json!({
             "type": "function",
             "function": {
+                "name": "use_skill",
+                "description": "Load a saved skill's full procedure by name (skills are listed in your system prompt). Call it before starting work that matches a skill, then follow it.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {"name": {"type": "string"}},
+                    "required": ["name"]
+                }
+            }
+        }),
+        json!({
+            "type": "function",
+            "function": {
+                "name": "create_skill",
+                "description": "Save a reusable multi-step workflow as a skill so it can be repeated later. Use after successfully completing a workflow the user is likely to repeat.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "name": {"type": "string", "description": "kebab-case, e.g. weekly-repo-digest"},
+                        "description": {"type": "string", "description": "One line: what it does and when to use it"},
+                        "body": {"type": "string", "description": "Markdown procedure: numbered steps naming the real tools, inputs to ask for, verification and output format"}
+                    },
+                    "required": ["name", "description", "body"]
+                }
+            }
+        }),
+        json!({
+            "type": "function",
+            "function": {
+                "name": "update_skill",
+                "description": "Improve an existing skill (e.g. after a step failed or the user corrected the procedure). Pass only the fields to change.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "name": {"type": "string", "description": "Existing skill name"},
+                        "description": {"type": "string"},
+                        "body": {"type": "string", "description": "Full replacement procedure"}
+                    },
+                    "required": ["name"]
+                }
+            }
+        }),
+        json!({
+            "type": "function",
+            "function": {
                 "name": "load_tools",
                 "description": "Search all connected app servers' tools by keyword and return the top 10 matching tool schemas. Use when unsure which tool to call.",
                 "parameters": {
@@ -250,6 +276,22 @@ fn builtin_tools() -> Vec<Value> {
                         "size": {"type": "string", "enum": ["1024x1024", "1024x1536", "1536x1024"], "default": "1024x1024"}
                     },
                     "required": ["prompt"]
+                }
+            }
+        }),
+        json!({
+            "type": "function",
+            "function": {
+                "name": "edit_image",
+                "description": "Edit an existing PNG/JPEG image with a text prompt (restyle, add or remove elements, variations) and return a new hosted image shown in chat. image_url: a /files/img/... URL from generate_image/edit_image, or a public http(s) image URL.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "image_url": {"type": "string"},
+                        "prompt": {"type": "string"},
+                        "size": {"type": "string", "enum": ["1024x1024", "1024x1536", "1536x1024"]}
+                    },
+                    "required": ["image_url", "prompt"]
                 }
             }
         }),
@@ -570,7 +612,15 @@ fn base_prompt() -> &'static str {
      Files: the user's context file holds standing background — follow it; edit it with \
      update_context only when asked. When you hit a non-obvious failure and find what works, \
      call save_lesson with a one-line takeaway; heed existing lessons.\n\
-     Use generate_image when the user wants visuals; run_code for computation or data munging.\n\
+     Skills: saved procedures are listed under ## skills — when a request matches one, call \
+     use_skill(name) first and follow it. After finishing a reusable multi-step workflow the user \
+     may repeat, call create_skill (kebab-case name, one-line description, numbered steps naming \
+     the real tools); improve an existing skill with update_skill instead of duplicating it.\n\
+     Narrate: before each batch of tool calls write ONE short sentence (max 20 words) saying what \
+     you are about to do and why; after results arrive, reason briefly about what they mean \
+     before the next step.\n\
+     Use generate_image when the user wants visuals and edit_image to change an existing image; \
+     run_code for computation or data munging.\n\
      Web: use browse to read web pages (markdown by default; screenshot when layout matters). \
      Use browser_handoff ONLY for logins, captchas or other steps only the user can do — then stop \
      and wait for the user to say done. Use delegate for independent read-only research threads; \
@@ -613,6 +663,7 @@ fn system_prompt(
     memories: &[String],
     summary: &str,
     files: &UserFiles,
+    skills_section: &str,
     mode: Mode,
 ) -> String {
     let mut p = base_prompt().to_string();
@@ -638,6 +689,7 @@ fn system_prompt(
         p.push_str("\n\n## lessons learned (newest last)\n");
         p.push_str(&tail(lessons, LESSONS_PROMPT_MAX));
     }
+    p.push_str(skills_section);
     if !memories.is_empty() {
         p.push_str("\n\n## what you remember about this user\n");
         for m in memories {
@@ -656,7 +708,9 @@ fn replay_messages(stored: &[Value]) -> Vec<Value> {
         let role = m.get("role").and_then(|v| v.as_str()).unwrap_or("user");
         let content = m.get("content").and_then(|v| v.as_str()).unwrap_or("");
         if role != "assistant" {
-            out.push(json!({"role": "user", "content": content}));
+            // Old turns re-send only the attachment listing, never image bytes.
+            let listing = attachment_listing(&stored_attachments(m));
+            out.push(json!({"role": "user", "content": format!("{}{}", content, listing)}));
             continue;
         }
         let parts = m
@@ -875,9 +929,13 @@ struct Ctx {
     servers: Vec<McpServerCfg>,
     /// Code workspace id (conversation id, or run id when not persisted).
     workspace: String,
+    /// Built-in tools the user switched off.
+    disabled: Vec<String>,
     /// Single-flight gate for sandbox browser calls, shared with subagents:
     /// the browser plan allows few concurrent sessions and slow launches.
     browser: futures::lock::Mutex<()>,
+    /// Per-run MCP circuit breaker (shared with subagents).
+    breaker: Breaker,
     out: Emitter,
 }
 
@@ -892,6 +950,12 @@ struct ToolOutcome {
     parts: Vec<Value>,
     /// Pages this call actually read (browse), for deep-mode citations.
     sources: Vec<Source>,
+    /// Failure class: timeout | transient | auth | circuit_open | invalid_args | error.
+    error_kind: Option<&'static str>,
+    /// Automatic retries performed before this outcome.
+    retries: u32,
+    /// MCP Apps `ui://` resource the tool declared, handled after the call.
+    ui_uri: Option<String>,
 }
 
 fn simple_outcome(app: &str, ok: bool, output: String, extra: Vec<(String, Value)>) -> ToolOutcome {
@@ -902,11 +966,20 @@ fn simple_outcome(app: &str, ok: bool, output: String, extra: Vec<(String, Value
         extra,
         parts: vec![],
         sources: vec![],
+        error_kind: None,
+        retries: 0,
+        ui_uri: None,
     }
 }
 
 fn fail(msg: impl Into<String>) -> ToolOutcome {
     simple_outcome("bloop", false, msg.into(), vec![])
+}
+
+fn fail_kind(app: &str, kind: &'static str, msg: impl Into<String>) -> ToolOutcome {
+    let mut o = simple_outcome(app, false, msg.into(), vec![]);
+    o.error_kind = Some(kind);
+    o
 }
 
 fn str_at<'a>(v: &'a Value, key: &str) -> &'a str {
@@ -918,8 +991,22 @@ struct Call {
     id: String,
     name: String,
     args: Value,
-    /// Arguments exactly as the model sent them (echoed back in history).
+    /// Arguments as the model sent them (echoed back in history; `{}` when invalid).
     raw_args: String,
+    /// Why the arguments could not be used, if they were not a JSON object.
+    args_error: Option<String>,
+}
+
+/// Parse model tool arguments: empty → `{}`; anything but a JSON object is an error.
+fn parse_args(raw: &str) -> (Value, Option<String>) {
+    if raw.trim().is_empty() {
+        return (json!({}), None);
+    }
+    match serde_json::from_str::<Value>(raw) {
+        Ok(v) if v.is_object() => (v, None),
+        Ok(_) => (json!({}), Some("arguments must be a JSON object".into())),
+        Err(e) => (json!({}), Some(e.to_string())),
+    }
 }
 
 impl Call {
@@ -929,11 +1016,20 @@ impl Call {
             .calls
             .iter()
             .enumerate()
-            .map(|(i, c)| Call {
-                id: if c.id.is_empty() { fallback_id(i) } else { c.id.clone() },
-                name: c.name.clone(),
-                args: serde_json::from_str(&c.args).unwrap_or_else(|_| json!({})),
-                raw_args: c.args.clone(),
+            .map(|(i, c)| {
+                let (args, args_error) = parse_args(&c.args);
+                let raw_args = if args_error.is_some() || c.args.trim().is_empty() {
+                    "{}".to_string()
+                } else {
+                    c.args.clone()
+                };
+                Call {
+                    id: if c.id.is_empty() { fallback_id(i) } else { c.id.clone() },
+                    name: c.name.clone(),
+                    args,
+                    raw_args,
+                    args_error,
+                }
             })
             .collect()
     }
@@ -979,13 +1075,18 @@ fn tool_message(call: &Call, out: &ToolOutcome) -> Value {
     json!({
         "role": "tool",
         "tool_call_id": call.id,
-        "content": if out.ok { body } else { format!("ERROR: {}", body) },
+        "content": match (out.ok, out.error_kind) {
+            (true, _) => body,
+            (false, Some(kind)) => format!("ERROR ({}): {}", kind, body),
+            (false, None) => format!("ERROR: {}", body),
+        },
     })
 }
 
-/// `{id, name, app, args, ok, ms, output}` for persisted parts and subagent transcripts.
+/// `{id, name, app, args, ok, ms, output, error_kind?, retries?}` for tool_result
+/// frames, persisted parts and subagent transcripts.
 fn tool_record(c: &Call, out: &ToolOutcome, ms: u64, max: usize) -> Value {
-    json!({
+    let mut v = json!({
         "id": c.id,
         "name": c.name,
         "app": out.app,
@@ -993,7 +1094,14 @@ fn tool_record(c: &Call, out: &ToolOutcome, ms: u64, max: usize) -> Value {
         "ok": out.ok,
         "ms": ms,
         "output": truncate(&out.output, max),
-    })
+    });
+    if let Some(kind) = out.error_kind {
+        v["error_kind"] = json!(kind);
+    }
+    if out.retries > 0 {
+        v["retries"] = json!(out.retries);
+    }
+    v
 }
 
 /// Keyword-search connected servers' tool schemas; returns top-10 matches.
@@ -1043,7 +1151,7 @@ async fn with_timeout<T>(fut: impl std::future::Future<Output = Result<T>>, ms: 
 // ---------- sandbox ----------
 
 async fn sandbox_post(ctx: &Ctx, path: &str, body: &Value) -> std::result::Result<(u16, Value), String> {
-    crate::sandbox::post(&ctx.env, &ctx.cfg, path, body).await
+    crate::sandbox::post(&ctx.env, &ctx.cfg, &ctx.user_id, path, body).await
 }
 
 use crate::sandbox::err_text as sandbox_err;
@@ -1104,6 +1212,81 @@ fn image_outcome(url: &str, prompt: &str, output: String) -> ToolOutcome {
     );
     o.parts.push(json!({"kind": "image", "url": url, "prompt": prompt}));
     o
+}
+
+/// R2 key of one of our `/files/<key>` URLs (relative or absolute), without query/fragment.
+fn files_key(src: &str) -> Option<&str> {
+    let rest = match src.strip_prefix("/files/") {
+        Some(r) => r,
+        None if src.starts_with("http") => src.split_once("/files/")?.1,
+        None => return None,
+    };
+    rest.split(['?', '#']).next()
+}
+
+/// Image bytes from a generated image in R2 (`/files/img|shots/...`) or a public http(s) URL.
+/// Our own URLs are read from R2 directly — a worker can't fetch its own workers.dev host.
+async fn load_image(ctx: &Ctx, src: &str) -> std::result::Result<Vec<u8>, String> {
+    if let Some(key) = files_key(src) {
+        if !matches!(
+            workspace::file_access(&ctx.user_id, key),
+            workspace::FileAccess::Owned("img" | "shots")
+        ) {
+            return Err("only your own generated images (/files/u/…/img/…) can be edited".into());
+        }
+        let bucket = ctx.env.bucket("FILES").map_err(|e| format!("r2 bucket: {}", e))?;
+        let obj = bucket
+            .get(key)
+            .execute()
+            .await
+            .map_err(|e| format!("r2 get: {}", e))?
+            .ok_or("image not found")?;
+        return obj
+            .body()
+            .ok_or("image is empty")?
+            .bytes()
+            .await
+            .map_err(|e| format!("r2 read: {}", e));
+    }
+    // Model-supplied URL: SSRF-guarded fetch (public https only, redirects re-validated).
+    let mut resp = crate::netguard::fetch_guarded(src, Method::Get, &Headers::new(), None)
+        .await
+        .map_err(|e| format!("image_url rejected or unreachable: {}", e))?;
+    let status = resp.status_code();
+    if status >= 400 {
+        return Err(format!("fetch image: HTTP {}", status));
+    }
+    let ctype = resp.headers().get("content-type").ok().flatten().unwrap_or_default();
+    if !ctype.trim().to_ascii_lowercase().starts_with("image/") {
+        return Err(format!(
+            "image_url is not an image (content-type '{}')",
+            crate::netguard::snippet(&ctype, 60)
+        ));
+    }
+    read_bytes_capped(&mut resp, IMAGE_FETCH_MAX).await
+}
+
+/// Largest remote image edit_image will download.
+const IMAGE_FETCH_MAX: usize = 20 * 1024 * 1024;
+
+/// Read a response body, failing past `cap` bytes (checks content-length, then streams).
+async fn read_bytes_capped(resp: &mut Response, cap: usize) -> std::result::Result<Vec<u8>, String> {
+    let too_big = || format!("image too large (> {} MB)", cap / (1024 * 1024));
+    if let Ok(Some(len)) = resp.headers().get("content-length") {
+        if len.trim().parse::<usize>().is_ok_and(|n| n > cap) {
+            return Err(too_big());
+        }
+    }
+    let mut stream = resp.stream().map_err(|e| format!("image read: {}", e))?;
+    let mut buf = Vec::new();
+    while let Some(chunk) = stream.next().await {
+        let chunk = chunk.map_err(|e| format!("image read: {}", e))?;
+        if buf.len() + chunk.len() > cap {
+            return Err(too_big());
+        }
+        buf.extend_from_slice(&chunk);
+    }
+    Ok(buf)
 }
 
 /// "webp" when the declared format or the bytes say so, else "png".
@@ -1182,11 +1365,7 @@ async fn browse(ctx: &Ctx, args: &Value) -> ToolOutcome {
                 Ok(b) => b,
                 Err(e) => return fail(format!("screenshot decode: {}", e)),
             };
-            let key = format!(
-                "shots/{}.{}",
-                crate::crypto::uuid(),
-                image_ext(str_at(&v, "format"), &bytes)
-            );
+            let key = workspace::user_file_key(&ctx.user_id, "shots", image_ext(str_at(&v, "format"), &bytes));
             match store_file(ctx, &key, bytes).await {
                 Ok(shot) => {
                     output.push_str(&format!("\nScreenshot (shown to the user): {}", shot));
@@ -1334,7 +1513,7 @@ async fn workspace_exec(ctx: &Ctx, args: &Value) -> ToolOutcome {
         return fail("command required");
     }
     let timeout_s = args.get("timeout_s").and_then(|v| v.as_u64());
-    let v = match workspace::exec(&ctx.env, &ctx.cfg, &ctx.workspace, command, timeout_s).await {
+    let v = match workspace::exec(&ctx.env, &ctx.cfg, &ctx.user_id, &ctx.workspace, command, timeout_s).await {
         Ok((status, v)) if status < 400 && v.get("exit_code").is_some() => v,
         Ok((409, v)) => {
             return fail(format!(
@@ -1465,18 +1644,251 @@ fn call_sources(call: &Call, out: &ToolOutcome) -> Vec<Source> {
 
 // ---------- tool execution ----------
 
-async fn call_mcp(client: &mut McpClient, tool: &str, args: &Value) -> ToolOutcome {
-    match client.call_tool(tool, args.clone()).await {
-        Ok((ok, out)) => simple_outcome(&client.name, ok, out, vec![]),
-        Err(e) => simple_outcome(&client.name, false, format!("{}", e), vec![]),
+fn mcp_error_kind(kind: crate::mcp::McpErrorKind) -> &'static str {
+    use crate::mcp::McpErrorKind as K;
+    match kind {
+        K::Timeout => "timeout",
+        K::Transient => "transient",
+        K::Auth => "auth",
+        K::Protocol | K::Tool => "error",
     }
+}
+
+async fn call_mcp(client: &mut McpClient, tool: &str, args: &Value) -> ToolOutcome {
+    match client.call_tool_full(tool, args.clone()).await {
+        Ok(o) => {
+            let text = match (o.text.is_empty(), &o.structured) {
+                (true, Some(s)) => s.to_string(),
+                _ => o.text,
+            };
+            let mut out = simple_outcome(&client.name, o.ok, text, vec![]);
+            out.ui_uri = o.ui.map(|u| u.uri);
+            out
+        }
+        Err(e) => {
+            let mut out = simple_outcome(&client.name, false, e.to_string(), vec![]);
+            out.error_kind = Some(mcp_error_kind(e.kind()));
+            out
+        }
+    }
+}
+
+/// Largest MCP App HTML we store.
+const MCP_APP_MAX: usize = 2 * 1024 * 1024;
+
+/// MCP Apps: read the tool's `ui://` resource, store it as sandboxed HTML under the
+/// caller's own prefix, and surface it as an `mcp_app` frame + persisted part.
+/// Failures only annotate the output — the tool result itself stands.
+async fn attach_mcp_app(ctx: &Ctx, client: &mut McpClient, c: &Call, uri: &str, out: &mut ToolOutcome) {
+    let (server, tool) = c.mcp().unwrap_or_default();
+    let html = match deadline(client.read_resource(uri), MCP_TIMEOUT_MS).await {
+        Some(Ok((mime, text))) if mime.to_ascii_lowercase().starts_with("text/html") && text.len() <= MCP_APP_MAX => text,
+        Some(Ok((mime, _))) => {
+            out.output.push_str(&format!("\n(app UI skipped: unsupported resource '{}')", crate::netguard::snippet(&mime, 60)));
+            return;
+        }
+        Some(Err(e)) => {
+            out.output.push_str(&format!("\n(app UI unavailable: {})", crate::netguard::snippet(&e.to_string(), 120)));
+            return;
+        }
+        None => {
+            out.output.push_str("\n(app UI unavailable: resource read timed out)");
+            return;
+        }
+    };
+    let key = format!("u/{}/mcpapp/{}.html", ctx.user_id, ledger::sha256_hex(&html));
+    match store_file(ctx, &key, html.into_bytes()).await {
+        Ok(url) => {
+            let app = json!({"id": c.id, "server": server, "tool": tool, "uri": uri, "url": url});
+            out.extra.push(("mcp_app".into(), app.clone()));
+            let mut part = app;
+            part["kind"] = json!("mcp_app");
+            out.parts.push(part);
+        }
+        Err(e) => out.output.push_str(&format!("\n(app UI unavailable: {})", e)),
+    }
+}
+
+/// `POST /api/mcp/call {server, tool, arguments}` — tool calls made by an MCP App
+/// iframe through the web host bridge, limited to servers this user may use.
+pub async fn mcp_call_route(mut req: Request, env: &Env, user_id: &str) -> Result<Response> {
+    let body: Value = req.json().await.unwrap_or_else(|_| json!({}));
+    let (server, tool) = (str_at(&body, "server"), str_at(&body, "tool"));
+    let err = |msg: String, status: u16| -> Result<Response> {
+        Ok(Response::from_json(&json!({"ok": false, "error": msg}))?.with_status(status))
+    };
+    if server.is_empty() || tool.is_empty() {
+        return err("server and tool required".into(), 400);
+    }
+    let args = body
+        .get("arguments")
+        .filter(|a| a.is_object())
+        .cloned()
+        .unwrap_or_else(|| json!({}));
+    let cfg = Config::from_env(env);
+    let admin = crate::auth::is_admin(env, &cfg, user_id).await;
+    let mut servers = cfg.servers_for(admin);
+    servers.extend(crate::marketplace::resolve_user_servers(env, user_id).await);
+    let Some(server_cfg) = servers.iter().find(|s| s.name == server) else {
+        return err(format!("server '{}' is not available", server), 404);
+    };
+    let mut client = McpClient::from_cfg(server_cfg);
+    let call = async {
+        client.initialize_full().await?;
+        client.call_tool_full(tool, args).await
+    };
+    match deadline(call, MCP_TIMEOUT_MS).await {
+        Some(Ok(o)) => Response::from_json(&json!({"ok": o.ok, "output": o.text, "structured": o.structured})),
+        Some(Err(e)) => err(crate::netguard::snippet(&e.to_string(), 300), 502),
+        None => err("timed out".into(), 504),
+    }
+}
+
+// ---------- failure protection ----------
+
+const MCP_TIMEOUT_MS: u64 = 60_000;
+const BROWSER_TIMEOUT_MS: u64 = 45_000;
+const MEDIA_TIMEOUT_MS: u64 = 150_000;
+const DEFAULT_TIMEOUT_MS: u64 = 60_000;
+const RESEARCH_DELEGATE_TIMEOUT_MS: u64 = 5 * 60_000;
+/// Build subagents install, compile and test — 5 minutes is too tight.
+const BUILD_DELEGATE_TIMEOUT_MS: u64 = 15 * 60_000;
+/// Assumed sandbox exec timeout when the model passes none.
+const EXEC_DEFAULT_TIMEOUT_S: u64 = 300;
+/// Consecutive transport-level failures that open a server's circuit for the run.
+const BREAKER_THRESHOLD: u32 = 3;
+
+/// Deadline for one tool call.
+fn tool_timeout_ms(c: &Call) -> u64 {
+    if c.mcp().is_some() {
+        return MCP_TIMEOUT_MS;
+    }
+    match c.name.as_str() {
+        "browse" | "browser_handoff" => BROWSER_TIMEOUT_MS,
+        "workspace_exec" => {
+            let t = c.args.get("timeout_s").and_then(|v| v.as_u64()).unwrap_or(EXEC_DEFAULT_TIMEOUT_S);
+            (t.min(3600) + 30) * 1000
+        }
+        "delegate" if str_at(&c.args, "kind") == "build" => BUILD_DELEGATE_TIMEOUT_MS,
+        "delegate" => RESEARCH_DELEGATE_TIMEOUT_MS,
+        "generate_image" | "edit_image" => MEDIA_TIMEOUT_MS,
+        _ => DEFAULT_TIMEOUT_MS,
+    }
+}
+
+/// Classify a failed tool's output into an error kind.
+fn classify_error(msg: &str) -> &'static str {
+    let m = msg.to_ascii_lowercase();
+    let has = |words: &[&str]| words.iter().any(|w| m.contains(w));
+    if has(&["timed out", "timeout", "deadline exceeded"]) {
+        "timeout"
+    } else if has(&["401", "403", "unauthorized", "unauthenticated", "forbidden", "invalid token", "not authorized", "permission denied", "authentication"]) {
+        "auth"
+    } else if has(&["429", "rate limit", "too many requests", "502", "503", "504", "bad gateway", "service unavailable", "temporarily", "network error", "connection reset", "try again"]) {
+        "transient"
+    } else if has(&["invalid param", "invalid argument", "-32602", "validation", "missing required", "required property"]) {
+        "invalid_args"
+    } else {
+        "error"
+    }
+}
+
+fn classify(out: &mut ToolOutcome) {
+    if !out.ok && out.error_kind.is_none() {
+        out.error_kind = Some(classify_error(&out.output));
+    }
+}
+
+/// Per-run circuit breaker over MCP servers.
+#[derive(Default)]
+struct Breaker(std::cell::RefCell<std::collections::HashMap<String, u32>>);
+
+impl Breaker {
+    fn is_open(&self, server: &str) -> bool {
+        self.0.borrow().get(server).is_some_and(|n| *n >= BREAKER_THRESHOLD)
+    }
+
+    /// Record a call result; returns true when this failure just opened the circuit.
+    /// Only timeouts, transient and auth failures count — a normal tool error
+    /// (e.g. "not found") proves the server is responsive and resets the count.
+    fn record(&self, server: &str, out: &ToolOutcome) -> bool {
+        let mut m = self.0.borrow_mut();
+        let n = m.entry(server.to_string()).or_insert(0);
+        if out.ok || !matches!(out.error_kind, Some("timeout" | "transient" | "auth")) {
+            *n = 0;
+            return false;
+        }
+        *n += 1;
+        *n == BREAKER_THRESHOLD
+    }
+}
+
+/// Await `fut` for at most `ms`; None on expiry (the future is dropped).
+async fn deadline<T>(fut: impl std::future::Future<Output = T>, ms: u64) -> Option<T> {
+    let delay = Delay::from(Duration::from_millis(ms));
+    futures::pin_mut!(fut);
+    futures::pin_mut!(delay);
+    match future::select(fut, delay).await {
+        Either::Left((v, _)) => Some(v),
+        Either::Right(_) => None,
+    }
+}
+
+/// Run a tool with a deadline; on expiry it fails with error_kind "timeout".
+async fn with_deadline(fut: impl std::future::Future<Output = ToolOutcome>, ms: u64, app: &str) -> ToolOutcome {
+    deadline(fut, ms).await.unwrap_or_else(|| {
+        fail_kind(
+            app,
+            "timeout",
+            format!(
+                "timed out after {}s without a response — try a different tool, a smaller request, or skip this step",
+                ms / 1000
+            ),
+        )
+    })
+}
+
+/// One MCP call behind the deadline and circuit breaker, retried once when a
+/// read-only tool fails transiently.
+async fn guarded_mcp(ctx: &Ctx, client: &mut McpClient, c: &Call) -> ToolOutcome {
+    let (server, tool) = c.mcp().unwrap_or_default();
+    if ctx.breaker.is_open(server) {
+        return fail_kind(
+            server,
+            "circuit_open",
+            format!(
+                "'{}' failed {} times in a row and is skipped for the rest of this run — use another app, tool or approach",
+                server, BREAKER_THRESHOLD
+            ),
+        );
+    }
+    let mut out = with_deadline(call_mcp(client, tool, &c.args), MCP_TIMEOUT_MS, server).await;
+    classify(&mut out);
+    if out.error_kind == Some("transient") && !is_mutating(tool) {
+        Delay::from(Duration::from_millis(800)).await;
+        out = with_deadline(call_mcp(client, tool, &c.args), MCP_TIMEOUT_MS, server).await;
+        classify(&mut out);
+        out.retries = 1;
+    }
+    if let Some(uri) = out.ui_uri.take().filter(|_| out.ok) {
+        attach_mcp_app(ctx, client, c, &uri, &mut out).await;
+    }
+    if ctx.breaker.record(server, &out) {
+        ctx.out.emit("server", json!({"name": server, "state": "degraded"}));
+        out.output.push_str(&format!(
+            "\n(circuit opened: further calls to '{}' are skipped this run — use alternatives)",
+            server
+        ));
+    }
+    out
 }
 
 /// Execute one model turn's tool calls. Every `tool_call` frame goes out first;
 /// calls then run concurrently — calls to the same MCP server stay sequential
 /// on its shared session — and side frames + `tool_result` follow in index
-/// order. Returns (outcome, ms) per call, in index order. `parent` is the
-/// subagent id when running inside one.
+/// order. Every call has a deadline and a failure never aborts the run.
+/// Returns (outcome, ms) per call, in index order. `parent` is the subagent
+/// when running inside one.
 async fn run_batch(
     ctx: &Ctx,
     clients: &mut [McpClient],
@@ -1500,9 +1912,10 @@ async fn run_batch(
             .iter()
             .enumerate()
             .filter(|(_, c)| {
-                c.mcp().is_some_and(|(server, tool)| {
-                    server == client.name && !(parent.is_some() && is_mutating(tool))
-                })
+                c.args_error.is_none()
+                    && c.mcp().is_some_and(|(server, tool)| {
+                        server == client.name && !(parent.is_some() && is_mutating(tool))
+                    })
             })
             .map(|(i, _)| i)
             .collect();
@@ -1515,9 +1928,8 @@ async fn run_batch(
         groups.push(Box::pin(async move {
             let mut done = Vec::with_capacity(idxs.len());
             for i in idxs {
-                let (_, tool) = calls[i].mcp().unwrap_or_default();
                 let t0 = now_ms();
-                let out = call_mcp(client, tool, &calls[i].args).await;
+                let out = guarded_mcp(ctx, client, &calls[i]).await;
                 done.push((i, out, timed(t0)));
             }
             done
@@ -1526,7 +1938,19 @@ async fn run_batch(
     for (i, c) in calls.iter().enumerate().filter(|(i, _)| !claimed[*i]) {
         groups.push(Box::pin(async move {
             let t0 = now_ms();
-            let out = dispatch(ctx, c, parent).await;
+            let mut out = match &c.args_error {
+                Some(e) => fail_kind(
+                    c.app(),
+                    "invalid_args",
+                    format!("invalid JSON arguments for {}: {} — resend the call with a valid JSON object", c.name, e),
+                ),
+                None => with_deadline(dispatch(ctx, c, parent), tool_timeout_ms(c), c.app()).await,
+            };
+            classify(&mut out);
+            if c.name == "delegate" && out.error_kind == Some("timeout") {
+                // The subagent was dropped mid-run; close its card.
+                ctx.out.emit("subagent_end", json!({"id": c.id, "ok": false, "summary": out.output}));
+            }
             vec![(i, out, timed(t0))]
         }));
     }
@@ -1562,8 +1986,14 @@ async fn dispatch(ctx: &Ctx, call: &Call, parent: Option<Parent<'_>>) -> ToolOut
         };
         return simple_outcome(server, false, msg, vec![]);
     }
+    if !tools_registry::is_enabled(&call.name, &ctx.disabled) {
+        return fail(format!("'{}' is turned off by the user; use another approach", call.name));
+    }
     if parent.is_some_and(|p| !p.allows(&call.name)) {
         return fail(format!("'{}' is not available to subagents", call.name));
+    }
+    if let Err(msg) = db::quota_hit(&ctx.env, &ctx.user_id, &call.name).await {
+        return fail_kind("bloop", "quota", format!("{} — continue without this tool", msg));
     }
     match call.name.as_str() {
         "update_plan" => {
@@ -1611,6 +2041,10 @@ async fn dispatch(ctx: &Ctx, call: &Call, parent: Option<Parent<'_>>) -> ToolOut
         }
         "forget" => {
             let query = str_at(args, "query");
+            // The query is a substring match: short or wildcard queries would wipe everything.
+            if query.trim().chars().count() < 3 || query.contains('%') || query.contains('_') {
+                return fail("forget query must be at least 3 characters and contain no % or _");
+            }
             match db::forget_memories(&ctx.env, &ctx.user_id, query).await {
                 Ok(n) => simple_outcome(
                     "bloop",
@@ -1675,6 +2109,91 @@ async fn dispatch(ctx: &Ctx, call: &Call, parent: Option<Parent<'_>>) -> ToolOut
                 vec![("tools_loaded".into(), loaded)],
             )
         }
+        "use_skill" => {
+            let name = str_at(args, "name").trim();
+            match db::get_skill(&ctx.env, &ctx.user_id, name).await {
+                Ok(Some(row)) if skills::is_enabled(&row) => simple_outcome(
+                    "bloop",
+                    true,
+                    truncate(str_at(&row, "body"), skills::USE_BODY_MAX),
+                    vec![("skill".into(), json!({"action": "use", "name": name}))],
+                ),
+                Ok(_) => fail(format!("no enabled skill named '{}'", name)),
+                Err(e) => fail(e.to_string()),
+            }
+        }
+        "create_skill" => {
+            let (name, description, body) = (
+                str_at(args, "name").trim(),
+                str_at(args, "description").trim(),
+                str_at(args, "body"),
+            );
+            if let Err(e) = skills::validate(name, description, body) {
+                return fail(e);
+            }
+            match db::create_skill(&ctx.env, &ctx.user_id, name, description, body, "agent", true).await {
+                Ok(_) => simple_outcome(
+                    "bloop",
+                    true,
+                    json!({"ok": true, "name": name}).to_string(),
+                    vec![("skill".into(), json!({"action": "create", "name": name}))],
+                ),
+                Err(e) if e.to_string().contains("UNIQUE") => {
+                    fail(format!("skill '{}' already exists; use update_skill", name))
+                }
+                Err(e) => fail(e.to_string()),
+            }
+        }
+        "update_skill" => {
+            let name = str_at(args, "name").trim();
+            let field = |k: &str| args.get(k).and_then(|v| v.as_str()).filter(|s| !s.trim().is_empty());
+            let (description, body) = (field("description").map(str::trim), field("body"));
+            let cur = match db::get_skill(&ctx.env, &ctx.user_id, name).await {
+                Ok(Some(row)) => row,
+                Ok(None) => return fail(format!("no skill named '{}'; use create_skill", name)),
+                Err(e) => return fail(e.to_string()),
+            };
+            if let Err(e) = skills::validate(
+                name,
+                description.unwrap_or(str_at(&cur, "description")),
+                body.unwrap_or(str_at(&cur, "body")),
+            ) {
+                return fail(e);
+            }
+            match db::update_skill(&ctx.env, &ctx.user_id, str_at(&cur, "id"), None, description, body, None).await {
+                Ok(_) => simple_outcome(
+                    "bloop",
+                    true,
+                    json!({"ok": true, "name": name}).to_string(),
+                    vec![("skill".into(), json!({"action": "update", "name": name}))],
+                ),
+                Err(e) => fail(e.to_string()),
+            }
+        }
+        "edit_image" => {
+            let prompt = str_at(args, "prompt");
+            let src = str_at(args, "image_url").trim();
+            if prompt.is_empty() || src.is_empty() {
+                return fail("image_url and prompt required");
+            }
+            let input = match load_image(ctx, src).await {
+                Ok(b) => b,
+                Err(e) => return fail(e),
+            };
+            let (bytes, ext) = match azure::edit_image(&ctx.cfg, &input, prompt, str_at(args, "size")).await {
+                Ok(x) => x,
+                Err(e) => return fail(e.to_string()),
+            };
+            let key = workspace::user_file_key(&ctx.user_id, "img", ext);
+            match store_file(ctx, &key, bytes).await {
+                Ok(url) => image_outcome(
+                    &url,
+                    prompt,
+                    json!({"url": url, "prompt": prompt, "source": src}).to_string(),
+                ),
+                Err(e) => fail(e),
+            }
+        }
         "generate_image" => {
             let prompt = str_at(args, "prompt");
             let size = match str_at(args, "size") {
@@ -1688,7 +2207,7 @@ async fn dispatch(ctx: &Ctx, call: &Call, parent: Option<Parent<'_>>) -> ToolOut
                 Ok(x) => x,
                 Err(e) => return fail(e.to_string()),
             };
-            let key = format!("img/{}.{}", crate::crypto::uuid(), ext);
+            let key = workspace::user_file_key(&ctx.user_id, "img", ext);
             match store_file(ctx, &key, bytes).await {
                 Ok(url) => image_outcome(&url, prompt, json!({"url": url, "prompt": prompt}).to_string()),
                 Err(e) => fail(e),
@@ -1791,7 +2310,7 @@ async fn model_turn(
 fn subagent_tools(ctx: &Ctx, me: Parent<'_>) -> Vec<Value> {
     let mut tools: Vec<Value> = builtin_tools()
         .into_iter()
-        .filter(|t| me.allows(tool_name(t)))
+        .filter(|t| me.allows(tool_name(t)) && tools_registry::is_enabled(tool_name(t), &ctx.disabled))
         .collect();
     for (server, list) in &ctx.all_tools {
         tools.extend(
@@ -1847,7 +2366,7 @@ fn run_subagent<'a>(ctx: &'a Ctx, call: &'a Call) -> LocalBoxFuture<'a, ToolOutc
         let mut clients: Vec<McpClient> = ctx
             .servers
             .iter()
-            .map(|s| McpClient::new(&s.name, &s.url, &s.token))
+            .map(McpClient::from_cfg)
             .collect();
         let mut ready = vec![false; clients.len()];
         let mut records = Vec::new();
@@ -1922,6 +2441,120 @@ fn run_subagent<'a>(ctx: &'a Ctx, call: &'a Call) -> LocalBoxFuture<'a, ToolOutc
 
 // ---------- run ----------
 
+// ---------- attachments ----------
+
+/// Attachments accepted per chat message.
+const ATTACHMENTS_MAX: usize = 50;
+/// Images sent to the model as vision input per message.
+const VISION_IMAGES_MAX: usize = 8;
+
+/// A workspace file (uploaded under `uploads/`) attached to a user message.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Attachment {
+    pub path: String,
+    /// Client-declared type — display only; images are re-sniffed before vision use.
+    pub mime: String,
+    pub bytes: u64,
+}
+
+impl Attachment {
+    fn from_value(v: &Value) -> Option<Attachment> {
+        let path = str_at(v, "path");
+        (path.starts_with("uploads/") && workspace::validate_path(path).is_ok()).then(|| Attachment {
+            path: path.to_string(),
+            mime: crate::netguard::snippet(str_at(v, "mime"), 100),
+            bytes: v.get("bytes").and_then(|b| b.as_u64()).unwrap_or(0),
+        })
+    }
+
+    fn part(&self) -> Value {
+        json!({"kind": "attachment", "path": self.path, "mime": self.mime, "bytes": self.bytes})
+    }
+
+    fn looks_like_image(&self) -> bool {
+        let ext = self.path.rsplit('.').next().unwrap_or("").to_ascii_lowercase();
+        self.mime.starts_with("image/") || matches!(ext.as_str(), "png" | "jpg" | "jpeg" | "gif" | "webp")
+    }
+}
+
+/// Parse `attachments` from a chat request body.
+pub fn parse_attachments(v: Option<&Value>) -> std::result::Result<Vec<Attachment>, String> {
+    let items = match v {
+        None | Some(Value::Null) => return Ok(Vec::new()),
+        Some(Value::Array(items)) => items,
+        Some(_) => return Err("attachments must be an array".into()),
+    };
+    if items.len() > ATTACHMENTS_MAX {
+        return Err(format!("too many attachments (max {})", ATTACHMENTS_MAX));
+    }
+    items
+        .iter()
+        .map(|item| {
+            Attachment::from_value(item)
+                .ok_or_else(|| format!("invalid attachment path '{}' (must be under uploads/)", crate::netguard::snippet(str_at(item, "path"), 80)))
+        })
+        .collect()
+}
+
+fn human_bytes(n: u64) -> String {
+    match n {
+        n if n >= 1024 * 1024 => format!("{:.1} MB", n as f64 / (1024.0 * 1024.0)),
+        n if n >= 1024 => format!("{} KB", n / 1024),
+        n => format!("{} B", n),
+    }
+}
+
+/// The line appended to a user turn so the agent knows what was attached.
+fn attachment_listing(atts: &[Attachment]) -> String {
+    if atts.is_empty() {
+        return String::new();
+    }
+    let items: Vec<String> = atts
+        .iter()
+        .map(|a| match a.mime.as_str() {
+            "" => format!("{} ({})", a.path, human_bytes(a.bytes)),
+            m => format!("{} ({}, {})", a.path, m, human_bytes(a.bytes)),
+        })
+        .collect();
+    format!(
+        "\n\n[attached in workspace: {} — open with workspace_read / workspace_exec]",
+        items.join(", ")
+    )
+}
+
+/// Attachments recorded in a stored message's parts.
+fn stored_attachments(m: &Value) -> Vec<Attachment> {
+    m.get("parts_json")
+        .and_then(|p| p.as_str())
+        .and_then(|s| serde_json::from_str::<Vec<Value>>(s).ok())
+        .unwrap_or_default()
+        .iter()
+        .filter(|p| str_at(p, "kind") == "attachment")
+        .filter_map(Attachment::from_value)
+        .collect()
+}
+
+/// This turn's image attachments as vision content parts: bytes read from R2 and
+/// sniffed (client MIME is never trusted), ≤ 5 MB each, at most 8.
+async fn load_vision_images(env: &Env, ws: &str, atts: &[Attachment]) -> Vec<Value> {
+    let candidates = atts.iter().filter(|a| a.looks_like_image()).take(VISION_IMAGES_MAX);
+    let loaded = future::join_all(candidates.map(|a| async move {
+        workspace::read_bytes(env, ws, &a.path, workspace::VISION_IMAGE_MAX).await.ok()
+    }))
+    .await;
+    loaded
+        .into_iter()
+        .flatten()
+        .filter_map(|bytes| {
+            let mime = workspace::sniff_mime(&bytes);
+            workspace::is_vision_mime(mime).then(|| {
+                let b64 = base64::engine::general_purpose::STANDARD.encode(&bytes);
+                json!({"type": "image_url", "image_url": {"url": format!("data:{};base64,{}", mime, b64)}})
+            })
+        })
+        .collect()
+}
+
 pub struct RunOpts {
     pub env: Env,
     pub cfg: Config,
@@ -1930,9 +2563,13 @@ pub struct RunOpts {
     pub conversation_id: String,
     /// Persist messages/title to D1 (false for the eval-token caller).
     pub persist: bool,
+    /// May use operator-credentialed MCP servers (see `auth::is_admin`).
+    pub admin: bool,
     pub message: String,
     pub model: String,
     pub mode: Mode,
+    /// Workspace files attached to this message (validated `uploads/` paths).
+    pub attachments: Vec<Attachment>,
 }
 
 /// Prior conversation state loaded before the first model call.
@@ -1977,6 +2614,8 @@ async fn load_memories(env: &Env, user_id: &str) -> Vec<String> {
 
 #[derive(Default)]
 struct Connected {
+    /// Public server states, cached for the unauthenticated /api/health.
+    public_states: Vec<Value>,
     clients: Vec<McpClient>,
     servers: Vec<McpServerCfg>,
     all_tools: Vec<(String, Vec<Value>)>,
@@ -1985,22 +2624,13 @@ struct Connected {
 /// Connect global env servers + this user's servers concurrently, each with a
 /// timeout, emitting a `server` frame as each one settles.
 async fn connect_servers(o: &RunOpts, out: &Emitter) -> Connected {
-    let mut cfgs = o.cfg.servers.clone();
-    if let Ok(rows) = db::list_user_servers(&o.env, &o.user_id).await {
-        for r in rows {
-            let (name, url) = (str_at(&r, "name"), str_at(&r, "url"));
-            if !name.is_empty() && !url.is_empty() {
-                cfgs.push(McpServerCfg {
-                    name: sanitize_name(name),
-                    url: url.to_string(),
-                    token: str_at(&r, "token").to_string(),
-                });
-            }
-        }
-    }
+    // Operator-credentialed global servers only for admins (C2).
+    let mut cfgs = o.cfg.servers_for(o.admin);
+    // The user's enabled servers (OAuth tokens refreshed, names sanitized).
+    cfgs.extend(crate::marketplace::resolve_user_servers(&o.env, &o.user_id).await);
     let mut clients: Vec<McpClient> = cfgs
         .iter()
-        .map(|s| McpClient::new(&s.name, &s.url, &s.token))
+        .map(McpClient::from_cfg)
         .collect();
     let results = future::join_all(clients.iter_mut().map(|c| async move {
         let res = with_timeout(
@@ -2026,6 +2656,18 @@ async fn connect_servers(o: &RunOpts, out: &Emitter) -> Connected {
     .await;
 
     let mut conn = Connected::default();
+    conn.public_states = cfgs
+        .iter()
+        .zip(&results)
+        .filter(|(s, _)| crate::config::PUBLIC_SERVERS.iter().any(|(n, _)| *n == s.name))
+        .map(|(s, r)| {
+            json!({
+                "name": s.name,
+                "state": if r.is_some() { "ok" } else { "error" },
+                "tools": r.as_ref().map_or(0, |t| t.len()),
+            })
+        })
+        .collect();
     for ((client, cfg), tools) in clients.into_iter().zip(cfgs).zip(results) {
         if let Some(tools) = tools {
             conn.all_tools.push((client.name.clone(), tools));
@@ -2082,17 +2724,19 @@ pub fn run(o: RunOpts) -> impl Stream<Item = Result<Vec<u8>>> {
 }
 
 async fn drive(o: RunOpts, tx: mpsc::UnboundedSender<Frame>) {
-    ledger::begin_run(&o.run_id);
+    ledger::begin_run(&o.user_id, &o.run_id);
     let out = Emitter { run_id: o.run_id.clone(), tx };
     out.emit("mode", json!({"mode": o.mode.as_str()}));
 
     // --- Setup, all concurrent. The user message is persisted after history
     // is read so it isn't replayed twice. ---
-    let (history, memories, files, conn) = futures::join!(
+    let (history, memories, files, conn, skill_rows, disabled, vision_images) = futures::join!(
         async {
             let h = load_history(&o).await;
             if o.persist {
-                let parts = json!([{"kind": "text", "text": o.message}]);
+                let mut parts = vec![json!({"kind": "text", "text": o.message})];
+                parts.extend(o.attachments.iter().map(Attachment::part));
+                let parts = json!(parts);
                 let _ = db::add_message(&o.env, &o.conversation_id, "user", &o.message, &parts).await;
             }
             h
@@ -2100,10 +2744,22 @@ async fn drive(o: RunOpts, tx: mpsc::UnboundedSender<Frame>) {
         load_memories(&o.env, &o.user_id),
         load_user_files(&o.env, &o.user_id),
         connect_servers(&o, &out),
+        async { db::list_skills(&o.env, &o.user_id).await.unwrap_or_default() },
+        async { db::disabled_tools(&o.env, &o.user_id).await.unwrap_or_default() },
+        load_vision_images(&o.env, &o.conversation_id, &o.attachments),
     );
 
     let mut clients = conn.clients;
-    let mut tools = builtin_tools();
+    let public_states = conn.public_states;
+    let mut tools: Vec<Value> = builtin_tools()
+        .into_iter()
+        .filter(|t| tools_registry::is_enabled(tool_name(t), &disabled))
+        .collect();
+    let skills_section = if tools_registry::is_enabled("use_skill", &disabled) {
+        skills::prompt_section(&skill_rows)
+    } else {
+        String::new()
+    };
     for (server, list) in &conn.all_tools {
         tools.extend(list.iter().map(|t| mcp_tool_to_openai(server, t)));
     }
@@ -2120,17 +2776,27 @@ async fn drive(o: RunOpts, tx: mpsc::UnboundedSender<Frame>) {
         models,
         all_tools: conn.all_tools,
         servers: conn.servers,
-        workspace: if o.persist { o.conversation_id.clone() } else { o.run_id.clone() },
+        // Eval runs get a fresh random conversation id, so their workspace is unguessable too.
+        workspace: o.conversation_id.clone(),
+        disabled,
         browser: futures::lock::Mutex::new(()),
+        breaker: Breaker::default(),
         out,
     };
 
     let mut messages = vec![json!({
         "role": "system",
-        "content": system_prompt(&connected, &memories, &history.summary, &files, o.mode)
+        "content": system_prompt(&connected, &memories, &history.summary, &files, &skills_section, o.mode)
     })];
     messages.extend(history.messages.iter().cloned());
-    messages.push(json!({"role": "user", "content": o.message}));
+    let user_text = format!("{}{}", o.message, attachment_listing(&o.attachments));
+    messages.push(if vision_images.is_empty() {
+        json!({"role": "user", "content": user_text})
+    } else {
+        let mut content = vec![json!({"type": "text", "text": user_text})];
+        content.extend(vision_images);
+        json!({"role": "user", "content": content})
+    });
 
     let on_text = |t: &str| ctx.out.send("delta", json!({"text": t}));
     let mut parts: Vec<Value> = Vec::new();
@@ -2195,6 +2861,7 @@ async fn drive(o: RunOpts, tx: mpsc::UnboundedSender<Frame>) {
     if o.persist {
         persist_assistant(&o, &history, &parts, &final_text).await;
     }
+    db::refresh_health_cache(&o.env, public_states).await;
     ctx.out.send("done", json!({"conversation_id": o.conversation_id}));
 }
 
@@ -2278,6 +2945,112 @@ mod tests {
         assert_eq!(Mode::parse("think").map(Mode::max_iters), Some(MAX_ITERS));
         assert_eq!(Mode::Deep.max_iters(), DEEP_MAX_ITERS);
         assert_eq!(Mode::parse("turbo"), None);
+    }
+
+    #[test]
+    fn parses_attachments() {
+        assert_eq!(parse_attachments(None).unwrap(), vec![]);
+        let ok = parse_attachments(Some(&json!([{"path": "uploads/a.png", "mime": "image/png", "bytes": 2048}]))).unwrap();
+        assert_eq!(ok[0].path, "uploads/a.png");
+        assert!(ok[0].looks_like_image());
+        assert!(parse_attachments(Some(&json!([{"path": "ws/other/a.png"}]))).is_err());
+        assert!(parse_attachments(Some(&json!([{"path": "uploads/../x"}]))).is_err());
+        assert!(parse_attachments(Some(&json!({"path": "uploads/a"}))).is_err());
+        let many: Vec<Value> = (0..ATTACHMENTS_MAX + 1).map(|i| json!({"path": format!("uploads/{i}")})).collect();
+        assert!(parse_attachments(Some(&json!(many))).is_err());
+    }
+
+    #[test]
+    fn replay_resends_attachment_listing_only() {
+        let parts = json!([
+            {"kind": "text", "text": "see file"},
+            {"kind": "attachment", "path": "uploads/data.csv", "mime": "text/csv", "bytes": 3072}
+        ]);
+        let out = replay_messages(&[json!({"role": "user", "content": "see file", "parts_json": parts.to_string()})]);
+        let content = out[0]["content"].as_str().unwrap();
+        assert!(content.starts_with("see file\n\n[attached in workspace: uploads/data.csv (text/csv, 3 KB)"));
+        assert!(!content.contains("base64"));
+        assert_eq!(attachment_listing(&[]), "");
+        assert_eq!(human_bytes(5 * 1024 * 1024), "5.0 MB");
+    }
+
+    #[test]
+    fn maps_mcp_error_kinds() {
+        use crate::mcp::McpErrorKind as K;
+        assert_eq!(mcp_error_kind(K::Timeout), "timeout");
+        assert_eq!(mcp_error_kind(K::Transient), "transient");
+        assert_eq!(mcp_error_kind(K::Auth), "auth");
+        assert_eq!(mcp_error_kind(K::Protocol), "error");
+        assert_eq!(mcp_error_kind(K::Tool), "error");
+    }
+
+    #[test]
+    fn classifies_errors() {
+        assert_eq!(classify_error("request timed out after 60s"), "timeout");
+        assert_eq!(classify_error("HTTP 401 Unauthorized"), "auth");
+        assert_eq!(classify_error("upstream 503 Service Unavailable"), "transient");
+        assert_eq!(classify_error("Rate limit exceeded, try again later"), "transient");
+        assert_eq!(classify_error("MCP error -32602: Invalid params"), "invalid_args");
+        assert_eq!(classify_error("issue not found"), "error");
+    }
+
+    #[test]
+    fn breaker_opens_on_consecutive_transport_failures_and_resets() {
+        let b = Breaker::default();
+        let transient = fail_kind("gh", "transient", "503");
+        let normal_err = fail_kind("gh", "error", "not found");
+        assert!(!b.record("gh", &transient));
+        assert!(!b.record("gh", &transient));
+        assert!(!b.record("gh", &normal_err)); // responsive server resets
+        assert!(!b.is_open("gh"));
+        assert!(!b.record("gh", &transient));
+        assert!(!b.record("gh", &transient));
+        assert!(b.record("gh", &transient));
+        assert!(b.is_open("gh"));
+        assert!(!b.is_open("other"));
+    }
+
+    #[test]
+    fn parses_tool_args() {
+        assert_eq!(parse_args(""), (json!({}), None));
+        assert_eq!(parse_args("{\"a\":1}"), (json!({"a": 1}), None));
+        assert!(parse_args("[1]").1.is_some());
+        assert!(parse_args("{\"a\":").1.is_some());
+    }
+
+    #[test]
+    fn per_tool_deadlines() {
+        let call = |name: &str, args: Value| Call {
+            id: "c".into(),
+            name: name.into(),
+            args,
+            raw_args: "{}".into(),
+            args_error: None,
+        };
+        assert_eq!(tool_timeout_ms(&call("github__get_issue", json!({}))), MCP_TIMEOUT_MS);
+        assert_eq!(tool_timeout_ms(&call("browse", json!({}))), BROWSER_TIMEOUT_MS);
+        assert_eq!(tool_timeout_ms(&call("workspace_exec", json!({"timeout_s": 90}))), 120_000);
+        assert_eq!(tool_timeout_ms(&call("delegate", json!({"kind": "build"}))), BUILD_DELEGATE_TIMEOUT_MS);
+        assert_eq!(tool_timeout_ms(&call("delegate", json!({}))), RESEARCH_DELEGATE_TIMEOUT_MS);
+    }
+
+    #[test]
+    fn every_builtin_is_registered() {
+        let names: Vec<String> = builtin_tools().iter().map(|t| tool_name(t).to_string()).collect();
+        for n in &names {
+            assert!(tools_registry::info(n).is_some(), "{n} missing from tools_registry");
+        }
+        for t in tools_registry::REGISTRY {
+            assert!(names.iter().any(|n| n == t.name), "{} not a builtin", t.name);
+        }
+    }
+
+    #[test]
+    fn files_key_parses_our_urls() {
+        assert_eq!(files_key("/files/img/a.jpg"), Some("img/a.jpg"));
+        assert_eq!(files_key("https://bloop.dev/files/shots/b.webp?x=1"), Some("shots/b.webp"));
+        assert_eq!(files_key("https://other.com/pic.png"), None);
+        assert_eq!(files_key("img/a.jpg"), None);
     }
 
     #[test]

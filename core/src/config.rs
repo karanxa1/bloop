@@ -15,9 +15,25 @@ pub struct Config {
     pub model: String,
     pub model_fallback: String,
     pub servers: Vec<McpServerCfg>,
+    pub sandbox_url: Option<String>,
+    pub sandbox_token: String,
 }
 
-fn env_str(env: &Env, key: &str) -> Option<String> {
+/// Chat models selectable via `model` in POST /api/chat.
+pub const MODELS: &[(&str, &str)] = &[
+    ("gpt-5.6-terra", "GPT-5.6 Terra"),
+    ("gpt-5.6-sol", "GPT-5.6 Sol"),
+    ("gpt-5.6-luna", "GPT-5.6 Luna"),
+    ("gpt-5.5", "GPT-5.5"),
+];
+
+pub const DEFAULT_MODEL: &str = "gpt-5.6-terra";
+
+pub fn model_allowed(m: &str) -> bool {
+    MODELS.iter().any(|(id, _)| *id == m)
+}
+
+pub fn env_str(env: &Env, key: &str) -> Option<String> {
     if let Ok(v) = env.var(key) {
         let s = v.to_string();
         if !s.is_empty() {
@@ -102,10 +118,12 @@ impl Config {
             azure_key: env_str(env, "AZURE_OPENAI_API_KEY").unwrap_or_default(),
             azure_version: env_str(env, "AZURE_OPENAI_API_VERSION")
                 .unwrap_or_else(|| "2025-04-01-preview".into()),
-            model: env_str(env, "AGENT_MODEL").unwrap_or_else(|| "gpt-6-astra".into()),
+            model: env_str(env, "AGENT_MODEL").unwrap_or_else(|| DEFAULT_MODEL.into()),
             model_fallback: env_str(env, "AGENT_MODEL_FALLBACK")
-                .unwrap_or_else(|| "gpt-5.6-terra".into()),
+                .unwrap_or_else(|| "gpt-5.5".into()),
             servers,
+            sandbox_url: env_str(env, "SANDBOX_URL").map(|u| u.trim_end_matches('/').to_string()),
+            sandbox_token: env_str(env, "SANDBOX_TOKEN").unwrap_or_default(),
         }
     }
 }

@@ -52,7 +52,7 @@ export function Composer({ streaming, onSend, onStop }: ComposerProps) {
           }}
           onKeyDown={onKeyDown}
           rows={1}
-          placeholder="ask bloop to do something…"
+          placeholder="tell bloop what to do…"
           disabled={streaming}
           className="max-h-40 flex-1 resize-none border border-neutral-300 bg-page px-3.5 py-2.5 text-sm text-neutral-800 placeholder:text-neutral-400 focus:border-bloop focus:outline-none focus:ring-2 focus:ring-bloop/40 disabled:opacity-60"
         />

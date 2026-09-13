@@ -1,12 +1,48 @@
 // ── API contract ──────────────────────────────────────────────────
 
+export interface User {
+  id: string;
+  email: string;
+  name: string;
+}
+
 export interface ApiMessage {
   role: "user" | "assistant";
   content: string;
+  /** persisted discriminated parts, when the backend stores them */
+  parts?: unknown;
 }
 
-export interface ChatRequest {
+export interface ConversationMeta {
+  id: string;
+  title: string;
+  model?: string;
+  updated_at: string;
+}
+
+export interface ConversationDetail extends ConversationMeta {
   messages: ApiMessage[];
+}
+
+export interface ModelInfo {
+  id: string;
+  label: string;
+  default?: boolean;
+}
+
+export interface Memory {
+  id: string;
+  content: string;
+  created_at: string;
+}
+
+export interface McpServer {
+  id: string;
+  name: string;
+  url: string;
+  source: "global" | "user";
+  state: "ok" | "error";
+  tool_count: number;
 }
 
 // SSE event payloads from POST /api/chat
@@ -17,14 +53,14 @@ export interface DeltaEvent {
 export interface ToolCallEvent {
   id: string;
   name: string;
-  app: string;
+  app?: string;
   args: unknown;
 }
 
 export interface ToolResultEvent {
   id: string;
-  name: string;
-  app: string;
+  name?: string;
+  app?: string;
   ok: boolean;
   ms: number;
   output: string;
@@ -39,6 +75,31 @@ export interface VerifyEvent {
   evidence: string;
   app?: string;
   hash: string;
+}
+
+export interface ImageEvent {
+  url: string;
+  prompt?: string;
+}
+
+export interface CodeEvent {
+  language: string;
+  source: string;
+  output?: string;
+  ok?: boolean;
+}
+
+export interface MemoryEvent {
+  action: "remember" | "forget";
+  content: string;
+}
+
+export interface ToolsLoadedEvent {
+  names: string[];
+}
+
+export interface DoneEvent {
+  conversation_id?: string;
 }
 
 export interface ErrorEvent {
@@ -83,7 +144,16 @@ export interface VerifyEntry {
 
 export type MessagePart =
   | { kind: "text"; id: string; text: string }
-  | { kind: "tool"; id: string }; // id matches a ToolCall id
+  | { kind: "tool"; id: string } // id matches a ToolCall id
+  | { kind: "image"; id: string; url: string; prompt?: string }
+  | {
+      kind: "code";
+      id: string;
+      language: string;
+      source: string;
+      output?: string;
+      ok?: boolean;
+    };
 
 export interface ChatMessage {
   id: string;
@@ -91,11 +161,21 @@ export interface ChatMessage {
   parts: MessagePart[];
   tools: Record<string, ToolCall>;
   error?: string;
+  /** true when hydrated from GET /api/conversations/:id — excluded from the live trace */
+  loaded?: boolean;
 }
 
 export type TraceItem =
   | { kind: "tool"; seq: number; call: ToolCall }
-  | { kind: "verify"; seq: number; entry: VerifyEntry };
+  | { kind: "verify"; seq: number; entry: VerifyEntry }
+  | { kind: "image"; seq: number; image: { url: string; prompt?: string } }
+  | {
+      kind: "code";
+      seq: number;
+      code: { language: string; source: string; output?: string; ok?: boolean };
+    }
+  | { kind: "memory"; seq: number; memory: MemoryEvent }
+  | { kind: "tools"; seq: number; names: string[] };
 
 // mutating tool names — a result from one of these without a matching
 // verify event counts as an "unverified write"

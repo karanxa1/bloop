@@ -6,6 +6,7 @@
 // Usage: BLOOP_API=http://localhost:8899 node evals/run.mjs [--task N]
 
 const API = process.env.BLOOP_API || "http://localhost:8899";
+const EVAL_TOKEN = process.env.EVAL_TOKEN || "";
 const REPO = "karanxa1/bloop-evals";
 
 const MARK = `bloop-eval-${Date.now().toString(36)}`;
@@ -95,9 +96,12 @@ async function runTask(task) {
   const started = Date.now();
   const res = await fetch(`${API}/api/chat`, {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers: {
+      "content-type": "application/json",
+      ...(EVAL_TOKEN ? { authorization: `Bearer ${EVAL_TOKEN}` } : {})
+    },
     body: JSON.stringify({
-      messages: [{ role: "user", content: task.prompt }]
+      message: task.prompt
     })
   });
   const text = await res.text();

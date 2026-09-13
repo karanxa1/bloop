@@ -7,6 +7,7 @@ build.command = "cargo install -q worker-build && worker-build --release"
 [assets]
 directory = "../web/dist"
 binding = "ASSETS"
+run_worker_first = ["/", "/app", "/app/*"]
 
 [[d1_databases]]
 binding = "DB"
@@ -26,3 +27,4 @@ AZURE_OPENAI_ENDPOINT = "https://callmissed-resource.cognitiveservices.azure.com
 AZURE_OPENAI_API_VERSION = "2025-04-01-preview"
 AGENT_MODEL = "gpt-5.6-terra"
 AGENT_MODEL_FALLBACK = "gpt-5.5"
+SANDBOX_URL = "https://bloop-sandbox.rough-cell-383c.workers.dev"

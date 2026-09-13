@@ -1,6 +1,26 @@
+use futures::future::{self, Either};
 use serde_json::{json, Value};
+use std::time::Duration;
 use wasm_bindgen::JsValue;
 use worker::*;
+
+/// Connect to a server (initialize + tools/list) with a 5s timeout.
+/// Returns the tool count on success.
+pub async fn probe(name: &str, url: &str, token: &str) -> Result<usize> {
+    let fut = async {
+        let mut c = McpClient::new(name, url, token);
+        c.initialize().await?;
+        let tools = c.list_tools().await?;
+        Ok::<usize, Error>(tools.len())
+    };
+    let delay = Delay::from(Duration::from_secs(5));
+    futures::pin_mut!(fut);
+    futures::pin_mut!(delay);
+    match future::select(fut, delay).await {
+        Either::Left((res, _)) => res,
+        Either::Right(_) => Err(Error::RustError("timed out after 5s".into())),
+    }
+}
 
 /// Minimal JSON-RPC-over-streamable-HTTP MCP client.
 pub struct McpClient {

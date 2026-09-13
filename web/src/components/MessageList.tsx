@@ -3,20 +3,21 @@ import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import type { ChatMessage } from "../types";
 import { ToolCallCard } from "./ToolCallCard";
+import { CodePart, ImagePart } from "./parts";
 import { AlertIcon, BlobIcon } from "../icons";
 
 const SUGGESTIONS = [
   {
-    label: "act on github",
-    text: "list my github repos, pick the most recently pushed, and create an issue there summarizing what it needs next — then verify it exists"
+    label: "teach it a taste",
+    text: "remember that I prefer terse answers with bullet points — then list my github repos briefly"
   },
   {
-    label: "research + file",
-    text: "research cloudflare/agents on deepwiki, file a github issue in karanxa1/bloop-evals summarizing it, then verify it and report the link"
+    label: "paint me a blob",
+    text: "generate an image of a tiny green blob surfing a wave of spreadsheets"
   },
   {
-    label: "prove failure honesty",
-    text: "create an issue in nonexistent-owner-xyz/definitely-not-a-repo-123 — show me exactly what happens"
+    label: "run some code",
+    text: "run python to compute the first 20 fibonacci numbers and show me the output"
   }
 ];
 
@@ -154,6 +155,22 @@ const MessageBubble = memo(function MessageBubble({ message }: { message: ChatMe
           if (part.kind === "tool") {
             const call = message.tools[part.id];
             return call ? <ToolCallCard key={part.id} call={call} /> : null;
+          }
+          if (part.kind === "image") {
+            return (
+              <ImagePart key={part.id} url={part.url} prompt={part.prompt} />
+            );
+          }
+          if (part.kind === "code") {
+            return (
+              <CodePart
+                key={part.id}
+                language={part.language}
+                source={part.source}
+                output={part.output}
+                ok={part.ok}
+              />
+            );
           }
           if (!part.text) return null;
           return (

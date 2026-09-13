@@ -1,6 +1,22 @@
-import type { PlanStep, TraceItem, VerifyEntry, ToolCall } from "../types";
+import type {
+  MemoryEvent,
+  PlanStep,
+  TraceItem,
+  VerifyEntry,
+  ToolCall
+} from "../types";
 import { MUTATING } from "../types";
-import { AlertIcon, CheckIcon, ShieldCheckIcon, SpinnerIcon, WrenchIcon, XIcon } from "../icons";
+import {
+  AlertIcon,
+  BrainIcon,
+  CheckIcon,
+  PlugIcon,
+  ShieldCheckIcon,
+  SpinnerIcon,
+  WrenchIcon,
+  XIcon
+} from "../icons";
+import { CodePart, ImagePart } from "./parts";
 
 interface ProofTraceProps {
   plan: PlanStep[];
@@ -23,7 +39,9 @@ function statusDot(status: PlanStep["status"]) {
 }
 
 export function ProofTrace({ plan, trace, verifyCount, onClose }: ProofTraceProps) {
-  const toolCalls = trace.filter((t): t is Extract<TraceItem, { kind: "tool" }> => t.kind === "tool");
+  const toolCalls = trace.filter(
+    (t): t is Extract<TraceItem, { kind: "tool" }> => t.kind === "tool"
+  );
   const mutating = toolCalls.filter(
     (t) =>
       t.call.status !== "running" &&
@@ -46,7 +64,7 @@ export function ProofTrace({ plan, trace, verifyCount, onClose }: ProofTraceProp
               type="button"
               onClick={onClose}
               aria-label="close proof trace"
-              className="ml-auto rounded-md p-1.5 text-neutral-400 hover:bg-neutral-100 hover:text-bloop-deep focus-visible:outline-2 focus-visible:outline-bloop-deep lg:hidden"
+              className="ml-auto rounded-full p-1.5 text-neutral-400 transition-colors duration-150 hover:bg-neutral-100 hover:text-bloop-deep focus-visible:outline-2 focus-visible:outline-bloop-deep"
             >
               <XIcon className="h-4 w-4" />
             </button>
@@ -57,7 +75,7 @@ export function ProofTrace({ plan, trace, verifyCount, onClose }: ProofTraceProp
           <span className="text-bloop-deep">{verifyCount} verified</span>
         </div>
         {unverified > 0 && (
-          <div className="mt-2 flex items-center gap-1.5 rounded-md border border-amber-300 bg-amber-50 px-2 py-1 text-[11px] font-medium text-amber-700">
+          <div className="mt-2 flex items-center gap-1.5 border border-amber-300 bg-amber-50 px-2 py-1 text-[11px] font-medium text-amber-700">
             <AlertIcon className="h-3.5 w-3.5" />
             {unverified} unverified {unverified === 1 ? "write" : "writes"}
           </div>
@@ -65,7 +83,7 @@ export function ProofTrace({ plan, trace, verifyCount, onClose }: ProofTraceProp
       </div>
 
       <div className="flex-1 overflow-y-auto scroll-thin">
-        {/* plan */}
+        {/* plan checklist */}
         {plan.length > 0 && (
           <section className="border-b border-neutral-100 px-4 py-3" aria-label="plan">
             <h3 className="mb-2 font-wordmark text-xs font-bold text-bloop-deep/70">
@@ -104,17 +122,29 @@ export function ProofTrace({ plan, trace, verifyCount, onClose }: ProofTraceProp
           </h3>
           {trace.length === 0 ? (
             <p className="text-xs text-neutral-400">
-              tool calls and verifications will appear here.
+              tool calls, code runs, memories and verifications will appear
+              here.
             </p>
           ) : (
             <ol className="space-y-1.5">
-              {trace.map((item) =>
-                item.kind === "tool" ? (
-                  <ToolTraceRow key={`t-${item.call.id}`} call={item.call} />
-                ) : (
-                  <VerifyTraceRow key={`v-${item.seq}`} entry={item.entry} />
-                )
-              )}
+              {trace.map((item) => {
+                switch (item.kind) {
+                  case "tool":
+                    return <ToolTraceRow key={`t-${item.call.id}`} call={item.call} />;
+                  case "verify":
+                    return <VerifyTraceRow key={`v-${item.seq}`} entry={item.entry} />;
+                  case "image":
+                    return <ImageTraceRow key={`i-${item.seq}`} item={item} />;
+                  case "code":
+                    return <CodeTraceRow key={`c-${item.seq}`} item={item} />;
+                  case "memory":
+                    return <MemoryTraceRow key={`m-${item.seq}`} memory={item.memory} />;
+                  case "tools":
+                    return <ToolsLoadedRow key={`l-${item.seq}`} names={item.names} />;
+                  default:
+                    return null;
+                }
+              })}
             </ol>
           )}
         </section>
@@ -170,12 +200,78 @@ function VerifyTraceRow({ entry }: { entry: VerifyEntry }) {
           </span>
         )}
         <span
-          className="font-mono text-[10px] text-neutral-500"
+          className="rounded-full border border-bloop/40 bg-white px-1.5 py-px font-mono text-[10px] text-bloop-deep"
           title={entry.hash}
         >
           #{entry.hash.slice(0, 8)}
         </span>
       </div>
+    </li>
+  );
+}
+
+function ImageTraceRow({
+  item
+}: {
+  item: Extract<TraceItem, { kind: "image" }>;
+}) {
+  return (
+    <li className="border border-neutral-200 border-l-2 border-l-bloop bg-white px-2.5 py-1.5">
+      <div className="flex items-center gap-2">
+        <ImagePart url={item.image.url} prompt={item.image.prompt} compact />
+        <div className="min-w-0 flex-1">
+          <span className="block text-[11px] font-medium text-neutral-700">
+            image generated
+          </span>
+          {item.image.prompt && (
+            <span className="block truncate text-[10px] text-neutral-400">
+              {item.image.prompt}
+            </span>
+          )}
+        </div>
+      </div>
+    </li>
+  );
+}
+
+function CodeTraceRow({ item }: { item: Extract<TraceItem, { kind: "code" }> }) {
+  return (
+    <li className="[&>div]:my-0">
+      <CodePart
+        language={item.code.language}
+        source={item.code.source}
+        output={item.code.output}
+        ok={item.code.ok}
+        collapsed
+      />
+    </li>
+  );
+}
+
+function MemoryTraceRow({ memory }: { memory: MemoryEvent }) {
+  return (
+    <li className="flex items-start gap-1.5 border border-neutral-200 border-l-2 border-l-bloop-deep bg-white px-2.5 py-1.5">
+      <BrainIcon className="mt-px h-3.5 w-3.5 shrink-0 text-bloop-deep" />
+      <span className="min-w-0 flex-1 text-[11px] leading-snug text-neutral-700">
+        <span className="font-semibold text-bloop-deep">
+          {memory.action === "forget" ? "forgot" : "remembered"}
+        </span>{" "}
+        {memory.content}
+      </span>
+    </li>
+  );
+}
+
+function ToolsLoadedRow({ names }: { names: string[] }) {
+  return (
+    <li className="flex items-center gap-1.5 px-2.5 py-1 text-[10px] text-neutral-400">
+      <PlugIcon className="h-3 w-3" />
+      <span className="min-w-0 truncate">
+        loaded {names.length} {names.length === 1 ? "tool" : "tools"}
+        {names.length > 0 && (
+          <span className="text-neutral-300"> · {names.join(", ")}</span>
+        )}
+      </span>
     </li>
   );
 }

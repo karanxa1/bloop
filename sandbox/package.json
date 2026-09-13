@@ -1,0 +1,21 @@
+{
+  "name": "bloop-sandbox",
+  "version": "1.0.0",
+  "type": "module",
+  "private": true,
+  "description": "Sandboxed code execution worker for the bloop agent backend",
+  "scripts": {
+    "dev": "wrangler dev --config ./wrangler.toml",
+    "deploy": "wrangler deploy --config ./wrangler.toml",
+    "cf-typegen": "wrangler types --config ./wrangler.toml",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@cloudflare/sandbox": "0.12.9"
+  },
+  "devDependencies": {
+    "@types/node": "24.10.1",
+    "typescript": "5.9.3",
+    "wrangler": "4.129.0"
+  }
+}

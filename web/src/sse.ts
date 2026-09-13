@@ -1,5 +1,3 @@
-import type { ApiMessage } from "./types";
-
 export interface ServerEvent {
   /** event: line, e.g. "delta" | "tool_call" | "tool_result" | "plan" | "verify" | "error" | "done" */
   type: string;
@@ -79,18 +77,25 @@ export interface StreamChatOptions {
   onEvent: (evt: ServerEvent) => void;
 }
 
+export interface ChatRequestBody {
+  conversation_id: string;
+  message: string;
+  model: string;
+}
+
 /** POST /api/chat and dispatch each SSE event to onEvent. Resolves on stream end. */
 export async function streamChat(
-  messages: ApiMessage[],
+  body: ChatRequestBody,
   { signal, onEvent }: StreamChatOptions
 ): Promise<void> {
   const res = await fetch("/api/chat", {
     method: "POST",
+    credentials: "include",
     headers: {
       "content-type": "application/json",
       accept: "text/event-stream"
     },
-    body: JSON.stringify({ messages }),
+    body: JSON.stringify(body),
     signal
   });
   if (!res.ok) {
@@ -106,7 +111,7 @@ export async function streamChat(
 }
 
 export async function fetchHealth(signal?: AbortSignal) {
-  const res = await fetch("/api/health", { signal });
+  const res = await fetch("/api/health", { credentials: "include", signal });
   if (!res.ok) throw new Error(`health check failed: ${res.status}`);
   return (await res.json()) as {
     ok: boolean;

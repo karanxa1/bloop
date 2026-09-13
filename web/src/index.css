@@ -39,6 +39,18 @@ body {
   background-color: var(--color-page);
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
+  text-transform: lowercase; /* everything lowercase — house style */
+}
+
+/* …but not the places where case is data */
+pre,
+code,
+kbd,
+samp,
+input,
+textarea,
+select {
+  text-transform: none;
 }
 
 /* ── markdown body ─────────────────────────────────────────────── */

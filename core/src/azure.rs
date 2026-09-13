@@ -1,4 +1,5 @@
 use crate::config::Config;
+use base64::Engine;
 use futures::stream::{Stream, StreamExt};
 use serde_json::{json, Value};
 use wasm_bindgen::JsValue;
@@ -81,6 +82,57 @@ pub fn chat_deltas(
             }
         }
     }
+}
+
+/// POST a JSON body to `url` with the given headers; returns parsed JSON.
+pub async fn post_json(url: &str, headers: &[(&str, &str)], body: &Value) -> Result<Value> {
+    let h = Headers::new();
+    h.set("content-type", "application/json")?;
+    for (k, v) in headers {
+        h.set(k, v)?;
+    }
+    let mut init = RequestInit::new();
+    init.with_method(Method::Post);
+    init.with_headers(h);
+    init.with_body(Some(JsValue::from_str(&body.to_string())));
+    let req = Request::new_with_init(url, &init)?;
+    let mut resp = Fetch::Request(req).send().await?;
+    let status = resp.status_code();
+    let text = resp.text().await.unwrap_or_default();
+    if status >= 400 {
+        return Err(Error::RustError(format!(
+            "POST {} → {}: {}",
+            url,
+            status,
+            &text[..text.len().min(300)]
+        )));
+    }
+    serde_json::from_str::<Value>(&text)
+        .map_err(|e| Error::RustError(format!("parse {}: {} | {}", url, e, &text[..text.len().min(300)])))
+}
+
+/// Generate an image via the Azure gpt-image deployment; returns raw PNG bytes.
+pub async fn generate_image(cfg: &Config, prompt: &str, size: &str) -> Result<Vec<u8>> {
+    let url = format!(
+        "{}/openai/deployments/gpt-image-2.5-flare/images/generations?api-version=2025-04-01-preview",
+        cfg.azure_endpoint
+    );
+    let body = json!({
+        "prompt": prompt,
+        "size": if size.is_empty() { "1024x1024" } else { size },
+        "quality": "high",
+        "n": 1,
+    });
+    let resp = post_json(&url, &[("api-key", &cfg.azure_key)], &body).await?;
+    let b64 = resp
+        .get("data")
+        .and_then(|d| d.get(0))
+        .and_then(|d| d.get("b64_json"))
+        .and_then(|b| b.as_str())
+        .ok_or_else(|| Error::RustError(format!("image response missing b64_json: {}", &resp.to_string()[..300.min(resp.to_string().len())])))?;
+    base64::engine::general_purpose::STANDARD
+        .decode(b64)
+        .map_err(|e| Error::RustError(format!("b64 decode: {}", e)))
 }
 
 /// Non-streaming chat-completions call. Returns raw response JSON.

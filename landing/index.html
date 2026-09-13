@@ -83,6 +83,13 @@
         <li>
           <a href="#access" class="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white">get access</a>
         </li>
+        <li class="border-l border-white/30 pl-8">
+          <a
+            href="/app"
+            class="text-white/70 transition-colors hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
+            >log in</a
+          >
+        </li>
       </ul>
     </nav>
 
@@ -96,7 +103,7 @@
         one tiny agent that does the doing across all your apps.
       </p>
       <a
-        href="#access"
+        href="/app"
         class="mt-10 inline-flex items-center rounded-full bg-bloop px-8 py-4 font-display text-lg font-bold text-ink transition-[transform,background-color] duration-200 ease-out hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink focus-visible:ring-offset-2 focus-visible:ring-offset-bloop motion-safe:hover:-translate-y-0.5 motion-reduce:transition-[background-color]"
         >get bloop</a
       >
@@ -142,7 +149,7 @@
 
     <div class="relative mx-auto max-w-6xl">
       <p class="text-xs font-semibold tracking-[0.2em] text-ink/60">what bloop does</p>
-      <h2 class="mt-3 font-display text-4xl font-extrabold text-ink sm:text-5xl">three jobs. one blob.</h2>
+      <h2 class="mt-3 font-display text-4xl font-extrabold text-ink sm:text-5xl">six jobs. one blob.</h2>
 
       <div class="mt-14 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
         <!-- card: acts, not chats -->
@@ -157,15 +164,48 @@
           </svg>
           <h3 class="mt-6 font-display text-2xl font-bold text-ink">acts, not chats</h3>
           <p class="mt-3 text-justify text-sm leading-relaxed text-neutral-600">
-            bloop does not just answer. it books, files, sends, and fixes — carrying a task to done inside your real
-            apps while you get on with your day.
+            bloop does not just answer. it books, files, sends, and fixes — taking real actions inside your real apps
+            while you get on with your day.
           </p>
         </article>
 
-        <!-- card: plugs into your apps -->
+        <!-- card: proves every step -->
         <article
           data-reveal
           class="bg-white p-8 opacity-0 transition-[transform,background-color] duration-200 ease-out [animation-delay:75ms] motion-safe:hover:-translate-y-1 motion-reduce:transition-[background-color] hover:bg-[#F2F2F2]"
+        >
+          <svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-12 w-12 text-olive" aria-hidden="true">
+            <path d="M24 5c9 0 17 6 17 15 0 9-4 14-10 17-6 3-13 3-17-1-4-4-6-11-4-17C12 12 16 5 24 5z" />
+            <path d="M17 24l5 5 10-11" />
+          </svg>
+          <h3 class="mt-6 font-display text-2xl font-bold text-ink">proves every step</h3>
+          <p class="mt-3 text-justify text-sm leading-relaxed text-neutral-600">
+            every action lands in a hash-chained verify trace, and every write is confirmed by read-back before bloop
+            moves on. receipts, not vibes.
+          </p>
+        </article>
+
+        <!-- card: remembers you -->
+        <article
+          data-reveal
+          class="bg-white p-8 opacity-0 transition-[transform,background-color] duration-200 ease-out [animation-delay:150ms] motion-safe:hover:-translate-y-1 motion-reduce:transition-[background-color] hover:bg-[#F2F2F2]"
+        >
+          <svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-12 w-12 text-olive" aria-hidden="true">
+            <path d="M24 5c9 0 17 6 17 15 0 9-4 14-10 17-6 3-13 3-17-1-4-4-6-11-4-17C12 12 16 5 24 5z" />
+            <circle cx="24" cy="23" r="4.5" />
+            <path d="M24 15v2M24 29v2M16 23h2M30 23h2" />
+          </svg>
+          <h3 class="mt-6 font-display text-2xl font-bold text-ink">remembers you</h3>
+          <p class="mt-3 text-justify text-sm leading-relaxed text-neutral-600">
+            preferences, people, past fixes — bloop keeps a persistent memory between sessions, so you never have to
+            explain yourself twice.
+          </p>
+        </article>
+
+        <!-- card: any tool, one blob -->
+        <article
+          data-reveal
+          class="bg-white p-8 opacity-0 transition-[transform,background-color] duration-200 ease-out [animation-delay:225ms] motion-safe:hover:-translate-y-1 motion-reduce:transition-[background-color] hover:bg-[#F2F2F2]"
         >
           <svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-12 w-12 text-olive" aria-hidden="true">
             <path d="M24 5c9 0 17 6 17 15 0 9-4 14-10 17-6 3-13 3-17-1-4-4-6-11-4-17C12 12 16 5 24 5z" />
@@ -174,26 +214,43 @@
             <rect x="25" y="28" width="7" height="7" />
             <path d="M21 23h4M28 21l-2 5" />
           </svg>
-          <h3 class="mt-6 font-display text-2xl font-bold text-ink">plugs into your apps</h3>
+          <h3 class="mt-6 font-display text-2xl font-bold text-ink">any tool, one blob</h3>
           <p class="mt-3 text-justify text-sm leading-relaxed text-neutral-600">
-            mail, calendar, docs, tickets, the weird internal tool. bloop reaches them all through connectors, apis,
-            and a very patient little browser.
+            plug in any mcp server from the marketplace — mail, calendar, docs, tickets, the weird internal tool —
+            and the blob just knows what to do with it.
           </p>
         </article>
 
-        <!-- card: proves every step -->
+        <!-- card: picks its brain -->
         <article
           data-reveal
-          class="bg-white p-8 opacity-0 transition-[transform,background-color] duration-200 ease-out [animation-delay:150ms] motion-safe:hover:-translate-y-1 motion-reduce:transition-[background-color] hover:bg-[#F2F2F2] sm:col-span-2 lg:col-span-1"
+          class="bg-white p-8 opacity-0 transition-[transform,background-color] duration-200 ease-out [animation-delay:300ms] motion-safe:hover:-translate-y-1 motion-reduce:transition-[background-color] hover:bg-[#F2F2F2]"
         >
           <svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-12 w-12 text-olive" aria-hidden="true">
             <path d="M24 5c9 0 17 6 17 15 0 9-4 14-10 17-6 3-13 3-17-1-4-4-6-11-4-17C12 12 16 5 24 5z" />
-            <path d="M17 24l5 5 10-11" />
+            <path d="M24 15l2.2 5.3 5.3 2.2-5.3 2.2L24 30l-2.2-5.3-5.3-2.2 5.3-2.2z" />
           </svg>
-          <h3 class="mt-6 font-display text-2xl font-bold text-ink">proves every step</h3>
+          <h3 class="mt-6 font-display text-2xl font-bold text-ink">picks its brain</h3>
           <p class="mt-3 text-justify text-sm leading-relaxed text-neutral-600">
-            every action is logged and every write is verified by replay, so nothing silently half-happens. receipts,
-            not vibes.
+            choose between frontier models and swap whenever you like. same blob, new brain — pick the thinker that
+            fits the job.
+          </p>
+        </article>
+
+        <!-- card: runs code for real -->
+        <article
+          data-reveal
+          class="bg-white p-8 opacity-0 transition-[transform,background-color] duration-200 ease-out [animation-delay:375ms] motion-safe:hover:-translate-y-1 motion-reduce:transition-[background-color] hover:bg-[#F2F2F2]"
+        >
+          <svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-12 w-12 text-olive" aria-hidden="true">
+            <path d="M24 5c9 0 17 6 17 15 0 9-4 14-10 17-6 3-13 3-17-1-4-4-6-11-4-17C12 12 16 5 24 5z" />
+            <path d="M20 19l-5 5 5 5" />
+            <path d="M28 19l5 5-5 5" />
+          </svg>
+          <h3 class="mt-6 font-display text-2xl font-bold text-ink">runs code for real</h3>
+          <p class="mt-3 text-justify text-sm leading-relaxed text-neutral-600">
+            when clicking is not enough, bloop writes and runs code in an isolated cloudflare sandbox. real
+            execution, and nothing touches your machine.
           </p>
         </article>
       </div>
@@ -225,7 +282,7 @@
           finished thing — plus a tidy log of everything it touched.
         </p>
         <a
-          href="#access"
+          href="/app"
           class="mt-8 inline-flex items-center rounded-full bg-white px-7 py-3.5 font-display font-bold text-olive transition-[transform,background-color,color] duration-200 ease-out hover:bg-bloop hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-olive motion-safe:hover:-translate-y-0.5 motion-reduce:transition-[background-color,color]"
           >see it work</a
         >
@@ -242,7 +299,7 @@
         </p>
         <div class="mt-4 h-1 w-10 bg-bloop" aria-hidden="true"></div>
         <p class="mt-4 text-justify text-sm leading-relaxed text-neutral-600">
-          apps reachable through connectors, apis, and one very determined little browser session.
+          apps reachable via mcp — mail, docs, tickets, and the weird internal tool, all from the marketplace.
         </p>
       </div>
       <div data-reveal class="opacity-0 [animation-delay:75ms]">
@@ -251,7 +308,7 @@
         </p>
         <div class="mt-4 h-1 w-10 bg-bloop" aria-hidden="true"></div>
         <p class="mt-4 text-justify text-sm leading-relaxed text-neutral-600">
-          of writes verified by replay before bloop calls a task done. no silent half-actions, ever.
+          of writes verified by read-back before bloop calls a task done. no silent half-actions, ever.
         </p>
       </div>
       <div data-reveal class="opacity-0 [animation-delay:150ms]">
@@ -260,7 +317,7 @@
         </p>
         <div class="mt-4 h-1 w-10 bg-bloop" aria-hidden="true"></div>
         <p class="mt-4 text-justify text-sm leading-relaxed text-neutral-600">
-          blob. it does not multiply, it does not swarm, it does not need to.
+          tiny blob. it does not multiply, it does not swarm, it does not need to.
         </p>
       </div>
     </div>
@@ -297,6 +354,14 @@
           join up
         </button>
       </form>
+      <p class="mt-6 text-sm text-white/80">
+        already have a blob?
+        <a
+          href="/app"
+          class="underline decoration-white/50 underline-offset-4 transition-colors hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
+          >log in</a
+        >
+      </p>
     </div>
   </section>
 
@@ -315,6 +380,7 @@
           <li><a href="#features" class="hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white">features</a></li>
           <li><a href="#numbers" class="hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white">numbers</a></li>
           <li><a href="#access" class="hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white">access</a></li>
+          <li><a href="/app" class="hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white">log in</a></li>
           <li><a href="mailto:hi@bloop.do" class="hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white">contact</a></li>
         </ul>
       </nav>

@@ -1,8 +1,10 @@
 import { LOGOS } from "../logos";
+import type { BrandLogo } from "../logos";
 import { cx } from "../lib";
 
 /** server name/url → brand key */
 const HOST_HINTS: [RegExp, string][] = [
+  [/higgsfield/i, "higgsfield"],
   [/github|githubcopilot/i, "github"],
   [/cloudflare|cf-docs|workers/i, "cloudflare"],
   [/zapier/i, "zapier"],
@@ -24,34 +26,70 @@ function brandKey(name: string, url: string): string | null {
   return null;
 }
 
+/** explicit catalog `logo` (brand key) wins, then name/url hints */
+export function resolveBrand(name: string, url = "", logo?: string): BrandLogo | null {
+  if (logo && LOGOS[logo.toLowerCase()]) return LOGOS[logo.toLowerCase()];
+  const key = brandKey(name, url);
+  return (key && LOGOS[key]) || LOGOS[name.toLowerCase()] || null;
+}
+
+const isImageUrl = (s?: string) => !!s && /^(https:\/\/|data:image\/)/i.test(s);
+
+function Glyph({ logo, className }: { logo: BrandLogo; className?: string }) {
+  return (
+    <svg
+      viewBox={logo.viewBox ?? "0 0 24 24"}
+      className={className}
+      fill={logo.color}
+      aria-hidden="true"
+    >
+      {logo.paths.map((d, i) => (
+        <path key={i} d={d} />
+      ))}
+    </svg>
+  );
+}
+
 interface ServerLogoProps {
   name: string;
   url: string;
+  /** catalog logo: brand key or https/data image url */
+  logo?: string;
   className?: string;
 }
 
 /**
- * Real brand logo for a connected server when we recognise it,
- * otherwise a letter monogram in bloop lime.
+ * Real brand logo for a server when we recognise it (or the catalog ships an
+ * image), otherwise a letter monogram in bloop lime.
  */
-export function ServerLogo({ name, url, className }: ServerLogoProps) {
-  const key = brandKey(name, url);
-  const logo = key ? LOGOS[key] : null;
+export function ServerLogo({ name, url, logo, className }: ServerLogoProps) {
+  const brand = resolveBrand(name, url, logo);
 
-  if (logo) {
+  if (brand) {
     return (
       <span
         className={cx(
           "flex h-9 w-9 shrink-0 items-center justify-center border border-neutral-200 bg-white",
           className
         )}
-        title={key ?? name}
+        style={brand.bg ? { backgroundColor: brand.bg, borderColor: brand.bg } : undefined}
+        aria-hidden="true"
       >
-        <svg viewBox="0 0 24 24" className="h-4.5 w-4.5" fill={logo.color} aria-hidden="true">
-          {logo.paths.map((d, i) => (
-            <path key={i} d={d} />
-          ))}
-        </svg>
+        <Glyph logo={brand} className="h-1/2 w-1/2" />
+      </span>
+    );
+  }
+
+  if (isImageUrl(logo)) {
+    return (
+      <span
+        className={cx(
+          "flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden border border-neutral-200 bg-white",
+          className
+        )}
+        aria-hidden="true"
+      >
+        <img src={logo} alt="" className="h-3/5 w-3/5 object-contain" loading="lazy" />
       </span>
     );
   }
@@ -75,18 +113,7 @@ export function ServerLogo({ name, url, className }: ServerLogoProps) {
  * unknown apps (the chip text is enough).
  */
 export function AppLogo({ name, className }: { name: string; className?: string }) {
-  const logo = LOGOS[brandKey(name, "") ?? ""] ?? LOGOS[name.toLowerCase()];
+  const logo = resolveBrand(name);
   if (!logo) return null;
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      className={cx("h-3.5 w-3.5", className)}
-      fill={logo.color}
-      aria-hidden="true"
-    >
-      {logo.paths.map((d, i) => (
-        <path key={i} d={d} />
-      ))}
-    </svg>
-  );
+  return <Glyph logo={logo} className={cx("h-3.5 w-3.5", className)} />;
 }

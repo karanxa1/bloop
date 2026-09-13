@@ -13,6 +13,15 @@ CF_ACCOUNT_ID = "337c662fed500c2dff530141baaf75c9"
 [browser]
 binding = "BROWSER"
 
+# Per-sandbox_id request rate for /run and /workspace/exec (period must be 10 or 60).
+[[ratelimits]]
+name = "EXEC_RATE"
+namespace_id = "7301"
+
+  [ratelimits.simple]
+  limit = 30
+  period = 60
+
 # Workspace source of truth: objects at ws/<workspace>/<relative path>.
 [[r2_buckets]]
 binding = "FILES"
@@ -31,7 +40,9 @@ image = "./Dockerfile"
 # standard-1 (1/2 vCPU, 4 GiB, 8 GB disk): workspaces run npm/pip installs and
 # builds that OOM on lite (256 MiB). Billed only while awake; CPU on active use.
 instance_type = "standard-1"
-max_instances = 1
+# One container per sandbox_id (tenant). Idle instances sleep after 5m
+# (getSandbox sleepAfter), so cost scales with active tenants only.
+max_instances = 20
 
 [[durable_objects.bindings]]
 class_name = "Sandbox"

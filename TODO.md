@@ -35,6 +35,8 @@ Living tracker for the v3 work specced in HANDOFF.md. `[x]` done · `[~]` in pro
 - [x] readme rewritten around hackathon submission requirements (overview · external apps · setup · reliability methodology · demo link) — keep updated as each feature lands; flip v3 items from "in progress" to shipped only after prod verification
 - [ ] **user:** demo video (≤ 2 min) link → README · team member emails in submission form
 
+> session restart (2026-09-14): 3 agents stopped. web partial work survived on disk (tsc clean); core-agent + core-mcp batches had not written anything → both restarted; web agent resumed to finish + report.
+
 ## hackathon (multiappagenthackathon.com)
 judging: technical execution 30% · reliability & evaluation 25% · usefulness 20% · originality 15% · demo clarity 10% · must connect ≥ 3 external apps · submit repo + ≤2 min video + readme
 

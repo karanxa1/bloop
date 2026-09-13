@@ -115,6 +115,7 @@ export interface HandoffEvent {
   url: string;
   reason: string;
   session_id: string;
+  external_url?: string;
 }
 
 export interface SubagentStartEvent {
@@ -264,7 +265,7 @@ export type MessagePart =
       output?: string;
       ok?: boolean;
     }
-  | { kind: "handoff"; id: string; url: string; reason: string; sessionId?: string }
+  | { kind: "handoff"; id: string; url: string; reason: string; sessionId?: string; externalUrl?: string }
   | { kind: "subagent"; id: string } // id matches a Subagent id
   /** streamed reasoning summary */
   | { kind: "thinking"; id: string; text: string }

@@ -1401,38 +1401,30 @@ async fn browser_handoff(ctx: &Ctx, args: &Value) -> ToolOutcome {
         Ok((s, v)) => return fail(browser_err("opening a browser session", s, &v)),
         Err(e) => return fail(e),
     };
+    // The chat embeds a live interactive view keyed by session_id — no external
+    // live-view URL is required. If the sandbox can mint a DevTools URL we pass
+    // it along as an "open in new tab" extra, but its absence is not a failure.
     let res = sandbox_post(ctx, "/browser/handoff", &json!({"session_id": session_id})).await;
-    match res {
-        Ok((s, v)) if s < 400 && !str_at(&v, "url").is_empty() => {
-            let url = str_at(&v, "url");
-            simple_outcome(
-                "bloop",
-                true,
-                format!(
-                    "Handoff started (session_id={sid}). The user now has a live browser window for: {reason}. \
-                     STOP now: briefly tell the user what to do in that window and wait for them to reply \"done\". \
-                     Only then continue with browse(url, session_id=\"{sid}\") to pick up in the same session.",
-                    sid = session_id,
-                    reason = reason
-                ),
-                vec![(
-                    "handoff".into(),
-                    json!({"url": url, "reason": reason, "session_id": session_id}),
-                )],
-            )
-        }
-        other => {
-            let _ = sandbox_post(ctx, "/browser/close", &json!({"session_id": session_id})).await;
-            match other {
-                Ok((501, v)) => fail(format!(
-                    "Live browser handoff is not available on this deployment ({}). Ask the user to do this step themselves and tell you when it is done.",
-                    sandbox_err(501, &v)
-                )),
-                Ok((s, v)) => fail(browser_err("handoff", s, &v)),
-                Err(e) => fail(e),
-            }
-        }
-    }
+    let external = match res {
+        Ok((s, v)) if s < 400 => Some(str_at(&v, "url").to_string()).filter(|u| !u.is_empty()),
+        _ => None,
+    };
+    let url = str_at(args, "url");
+    simple_outcome(
+        "bloop",
+        true,
+        format!(
+            "Handoff started (session_id={sid}). The user now controls a live browser embedded in this chat for: {reason}. \
+             STOP now: briefly tell the user what to do in the live view and wait for them to reply \"done\". \
+             Only then continue with browse(url, session_id=\"{sid}\") to pick up in the same session.",
+            sid = session_id,
+            reason = reason
+        ),
+        vec![(
+            "handoff".into(),
+            json!({"url": url, "reason": reason, "session_id": session_id, "external_url": external}),
+        )],
+    )
 }
 
 // ---------- workspace ----------

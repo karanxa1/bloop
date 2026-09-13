@@ -25,6 +25,7 @@ import { ToolCallCard } from "./ToolCallCard";
 import { CodePart, ImagePart } from "./parts";
 import { MarkdownText } from "./MarkdownText";
 import { AppLogo } from "./ServerLogo";
+import { LiveBrowser } from "./LiveBrowser";
 
 export const HANDOFF_DONE_MESSAGE = "done — i finished in the browser, continue";
 export const HANDOFF_SKIP_MESSAGE = "skip that step — continue without it";
@@ -34,10 +35,20 @@ export const HANDOFF_SKIP_MESSAGE = "skip that step — continue without it";
 const secondaryPill =
   "inline-flex items-center gap-1.5 rounded-full border px-4 py-2 text-sm font-semibold transition-colors duration-150 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-bloop-deep disabled:cursor-not-allowed";
 
-export function HandoffCard({ url, reason }: { url: string; reason: string }) {
+export function HandoffCard({
+  url,
+  reason,
+  sessionId,
+  externalUrl
+}: {
+  url: string;
+  reason: string;
+  sessionId?: string;
+  externalUrl?: string;
+}) {
   const { send, streaming } = useContext(ChatActions);
   const [choice, setChoice] = useState<"done" | "skip" | null>(null);
-  const href = safeHttpUrl(url);
+  const href = safeHttpUrl(externalUrl || url);
   const titleId = useId();
   const locked = streaming || choice != null;
 
@@ -73,21 +84,24 @@ export function HandoffCard({ url, reason }: { url: string; reason: string }) {
           <p className="mt-0.5 text-sm leading-relaxed text-neutral-700 [overflow-wrap:anywhere]">
             {reason || "bloop needs you to finish a step in the browser."}
           </p>
+          {sessionId && (
+            <div className="mt-3">
+              <LiveBrowser sessionId={sessionId} />
+            </div>
+          )}
           <div className="mt-3 flex flex-wrap items-center gap-2">
-            {href ? (
+            {externalUrl && href ? (
               <a
                 href={href}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center gap-1.5 rounded-full bg-bloop px-4 py-2 font-wordmark text-sm font-bold text-neutral-900 transition-[transform,background-color,color] duration-150 hover:bg-bloop-deep hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-bloop-deep motion-safe:hover:-translate-y-px"
+                className="inline-flex items-center gap-1.5 rounded-full border border-neutral-300 bg-white px-4 py-2 text-sm font-semibold text-neutral-700 transition-colors duration-150 hover:border-bloop hover:text-bloop-deep focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-bloop-deep"
               >
-                take over browser
+                open in new tab
                 <ExternalIcon className="h-3.5 w-3.5" />
                 <span className="sr-only">(opens in a new tab)</span>
               </a>
-            ) : (
-              <span className="text-xs text-red-600">browser link unavailable</span>
-            )}
+            ) : null}
             <button
               type="button"
               disabled={locked}

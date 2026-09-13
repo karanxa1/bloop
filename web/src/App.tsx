@@ -588,7 +588,8 @@ function ChatApp({
             id: uid(),
             url: d.url,
             reason,
-            sessionId: typeof d.session_id === "string" ? d.session_id : undefined
+            sessionId: typeof d.session_id === "string" ? d.session_id : undefined,
+            externalUrl: typeof d.external_url === "string" ? d.external_url : undefined
           };
           update((m) => ({ ...m, parts: [...m.parts, part] }));
           setExtras((x) => [
@@ -1462,7 +1463,9 @@ function fromApiMessage(m: ApiMessage, idx: number, convId?: string): ChatMessag
           kind: "handoff",
           id: uid(),
           url: p.url,
-          reason: typeof p.reason === "string" ? p.reason : ""
+          reason: typeof p.reason === "string" ? p.reason : "",
+          sessionId: typeof p.session_id === "string" ? p.session_id : undefined,
+          externalUrl: typeof p.external_url === "string" ? p.external_url : undefined
         });
       } else if (p.kind === "thinking" && typeof p.text === "string") {
         msg.parts.push({ kind: "thinking", id: uid(), text: p.text });

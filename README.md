@@ -49,7 +49,8 @@ Then try the [full 20-step self-test prompt](docs/USE-BLOOP.md#the-full-system-t
 | **One useful, multi-step agent** | Plans with `update_plan`, executes across iterations, narrates each step, finishes with a verified report — for everyday work (`default`), hard reasoning (`think`), and long-horizon research (`deep`). |
 | **≥ 3 external apps** | 15+ connected out of the box (GitHub, Linear, Notion, Sentry, Stripe, Zapier, DeepWiki, Context7, Cloudflare, Exa…), plus **paste any MCP URL** — bloop probes it, detects OAuth/token/none, and connects. |
 | **Multi-app orchestration** | `load_tools` searches every server's tools and pulls only what's needed; parallel calls fan out across apps; `delegate` runs parallel subagents that each reach the apps. |
-| **Beyond a chatbot** | Sandboxed code, a persistent workspace, image generation, a shareable remote browser, voice, memory, skills — and a tamper-evident proof trace for every action. |
+| **Beyond a chatbot** | Sandboxed code, a persistent workspace, image generation, a **live browser embedded in the chat** (click, type, scroll — for logins), voice, memory, skills — and a tamper-evident proof trace for every action. |
+| **Show how you know it works** | `node evals/run.mjs` → 6/6 tasks pass against the live deployment, verified against real GitHub state — not self-reported. Reports in `evals/report-*.md`. |
 
 ---
 
@@ -95,8 +96,9 @@ That one idea — *claims are worthless without receipts* — is the whole produ
 
 - **`browse`** — reads any page as clean markdown (Readability + Turndown on Cloudflare
   Browser Rendering) or takes a screenshot.
-- **`browser_handoff`** — hands the user a **live remote browser** for the one thing agents
-  can't do: signing in. The user clicks through the login, then hands it back.
+- **`browser_handoff`** — embeds a **live remote browser right inside the chat**: a
+  screencast stream you can click, type and scroll in. Use it for the one thing agents
+  can't do — signing in — then hand the session back to bloop, which picks it up by id.
 
 ### An agent of agents
 
@@ -204,7 +206,8 @@ npx wrangler deploy --config wrangler.toml                           # never fro
 # optional: cd sandbox && npx wrangler secret put CF_BROWSER_TOKEN   (live browser handoff)
 ```
 
-CI deploys on every push to `main` once `CLOUDFLARE_API_TOKEN` is set as a repo secret.
+CI deploys automatically on every push to `main`: checks → sandbox (when changed) →
+D1 schema → core worker + SPA → smoke test.
 
 > The repo-root `src/` + `wrangler.jsonc` is the original Agents-SDK TypeScript prototype —
 > kept for reference only. **Never deploy from the root.**

@@ -675,7 +675,14 @@ function VisiblePart({
     case "image":
       return <ImagePart url={part.url} prompt={part.prompt} />;
     case "handoff":
-      return <HandoffCard url={part.url} reason={part.reason} />;
+      return (
+        <HandoffCard
+          url={part.url}
+          reason={part.reason}
+          sessionId={part.sessionId}
+          externalUrl={part.externalUrl}
+        />
+      );
     case "mcp_app":
       return <McpAppFrame app={part} call={message.tools[part.id]} />;
     default:

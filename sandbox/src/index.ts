@@ -760,6 +760,217 @@ async function handleBrowserClose(request: Request, env: Env): Promise<Response>
 }
 
 // ---------------------------------------------------------------------------
+// /browser/view — live embedded browser: screencast frames stream down over a
+// WebSocket, mouse/keyboard/navigate messages stream back up through CDP.
+// ---------------------------------------------------------------------------
+
+const VIEW_MAX_MS = 10 * 60_000;
+const VIEW_FRAME_QUALITY = 62;
+const VIEW_META_MS = 1_200;
+const MAX_VIEW_MSG = 8_192;
+
+interface ViewMsg {
+	t?: string;
+	x?: number;
+	y?: number;
+	button?: string;
+	dx?: number;
+	dy?: number;
+	key?: string;
+	code?: string;
+	text?: string;
+	url?: string;
+}
+
+const VIEW_KEYS: Record<string, number> = {
+	Enter: 13, Tab: 9, Backspace: 8, Escape: 27, Delete: 46,
+	ArrowUp: 38, ArrowDown: 40, ArrowLeft: 37, ArrowRight: 39,
+	Home: 36, End: 35, PageUp: 33, PageDown: 34, Insert: 45,
+	F1: 112, F2: 113, F3: 114, F4: 115, F5: 116, F6: 117,
+	F7: 118, F8: 119, F9: 120, F10: 121, F11: 122, F12: 123,
+};
+
+async function handleBrowserView(request: Request, env: Env): Promise<Response> {
+	if ((request.headers.get("upgrade") ?? "").toLowerCase() !== "websocket") {
+		throw new HttpError(426, "expected websocket upgrade");
+	}
+	const params = new URL(request.url).searchParams;
+	const sandboxId = requireSandboxId(params.get("sandbox_id"));
+	const sessionId = requireSessionId(params.get("session_id"));
+	await requireOwnedSession(env, sandboxId, sessionId);
+
+	let browser: Browser;
+	try {
+		browser = await puppeteer.connect(env.BROWSER, sessionId);
+	} catch (err) {
+		throw new HttpError(404, `browser session unavailable: ${errorMessage(err)}`);
+	}
+	const pages = await browser.pages();
+	const page = pages.find((p) => p.url() !== "about:blank") ?? pages[0] ?? (await browser.newPage());
+	const cdp = await page.createCDPSession();
+
+	const pair = new WebSocketPair();
+	const client = pair[0];
+	const server = pair[1];
+	server.accept();
+
+	let closed = false;
+	let lastMeta = "";
+	const send = (o: unknown) => {
+		try {
+			server.send(typeof o === "string" ? o : JSON.stringify(o));
+		} catch {
+			/* socket already closing */
+		}
+	};
+	const sendMeta = async () => {
+		try {
+			const m = { t: "meta", url: page.url(), title: await page.title() };
+			const s = JSON.stringify(m);
+			if (s !== lastMeta) {
+				lastMeta = s;
+				server.send(s);
+			}
+		} catch {
+			/* page may be navigating */
+		}
+	};
+
+	const metaTimer = setInterval(sendMeta, VIEW_META_MS);
+	const killer = setTimeout(() => cleanup(4000, "view session time limit"), VIEW_MAX_MS);
+
+	const cleanup = (code: number, reason: string) => {
+		if (closed) return;
+		closed = true;
+		clearInterval(metaTimer);
+		clearTimeout(killer);
+		try {
+			server.close(code, reason);
+		} catch {
+			/* already closed */
+		}
+		void (async () => {
+			await cdp.send("Page.stopScreencast").catch(() => {});
+			// disconnect, not close — the agent picks the session back up with
+			// browse(session_id) after the user finishes their step.
+			await browser.disconnect().catch(() => {});
+		})();
+	};
+
+	cdp.on("Page.screencastFrame", (frame: { data: string; sessionId: number }) => {
+		if (closed || typeof frame.data !== "string" || frame.data.length === 0) {
+			if (typeof frame?.sessionId === "number") {
+				void cdp.send("Page.screencastFrameAck", { sessionId: frame.sessionId }).catch(() => {});
+			}
+			return;
+		}
+		// base64-in-JSON, not binary: the core relay's upstream socket delivers
+		// binary as Blob, which workers-rs reads as empty — text is reliable.
+		try {
+			server.send(JSON.stringify({ t: "frame", data: frame.data }));
+		} catch {
+			cleanup(1011, "frame send failed");
+			return;
+		}
+		void cdp.send("Page.screencastFrameAck", { sessionId: frame.sessionId }).catch(() => {});
+	});
+
+	try {
+		await cdp.send("Page.startScreencast", {
+			format: "jpeg",
+			quality: VIEW_FRAME_QUALITY,
+			everyNthFrame: 1,
+			maxWidth: VIEWPORT.width,
+			maxHeight: VIEWPORT.height,
+		});
+		send({ t: "ready", w: VIEWPORT.width, h: VIEWPORT.height });
+		void sendMeta();
+	} catch (err) {
+		send({ t: "error", msg: `live view failed to start: ${errorMessage(err)}` });
+		cleanup(1011, "screencast failed");
+		return new Response(null, { status: 101, webSocket: client });
+	}
+
+	server.addEventListener("message", (ev) => {
+		if (closed || typeof ev.data !== "string" || ev.data.length > MAX_VIEW_MSG) return;
+		void onViewMessage(ev.data);
+	});
+	server.addEventListener("close", () => cleanup(1000, "client closed"));
+	server.addEventListener("error", () => cleanup(1011, "socket error"));
+
+	const clamp = (n: unknown, max: number) =>
+		typeof n === "number" && Number.isFinite(n) ? Math.max(0, Math.min(max, n)) : 0;
+
+	async function onViewMessage(raw: string): Promise<void> {
+		let m: ViewMsg;
+		try {
+			m = JSON.parse(raw);
+		} catch {
+			return;
+		}
+		try {
+			switch (m.t) {
+				case "mouse": {
+					const x = clamp(m.x, VIEWPORT.width);
+					const y = clamp(m.y, VIEWPORT.height);
+					const button = m.button === "right" ? "right" : m.button === "middle" ? "middle" : "left";
+					if (m.key === "move") {
+						await cdp.send("Input.dispatchMouseEvent", { type: "mouseMoved", x, y });
+					} else if (m.key === "down") {
+						await cdp.send("Input.dispatchMouseEvent", { type: "mousePressed", x, y, button, clickCount: 1 });
+					} else if (m.key === "up") {
+						await cdp.send("Input.dispatchMouseEvent", { type: "mouseReleased", x, y, button, clickCount: 1 });
+					}
+					break;
+				}
+				case "wheel": {
+					const d = (n: unknown) =>
+						typeof n === "number" && Number.isFinite(n) ? Math.max(-4000, Math.min(4000, n)) : 0;
+					await cdp.send("Input.dispatchMouseEvent", {
+						type: "mouseWheel",
+						x: clamp(m.x, VIEWPORT.width),
+						y: clamp(m.y, VIEWPORT.height),
+						deltaX: d(m.dx),
+						deltaY: d(m.dy),
+					});
+					break;
+				}
+				case "key": {
+					const key = typeof m.key === "string" ? m.key : "";
+					const keyCode = VIEW_KEYS[key];
+					if (!keyCode) return;
+					const base = { key, code: m.code ?? key, windowsVirtualKeyCode: keyCode, nativeVirtualKeyCode: keyCode };
+					if (key === "Enter") {
+						await cdp.send("Input.dispatchKeyEvent", { ...base, type: "keyDown", text: "\r" });
+						await cdp.send("Input.dispatchKeyEvent", { ...base, type: "keyUp" });
+					} else {
+						await cdp.send("Input.dispatchKeyEvent", { ...base, type: "rawKeyDown" });
+						await cdp.send("Input.dispatchKeyEvent", { ...base, type: "keyUp" });
+					}
+					break;
+				}
+				case "text": {
+					if (typeof m.text === "string" && m.text.length > 0) {
+						await cdp.send("Input.insertText", { text: m.text.slice(0, 512) });
+					}
+					break;
+				}
+				case "nav": {
+					const target = requirePublicHttpUrl(m.url);
+					await page.goto(target, { waitUntil: "domcontentloaded", timeout: NAV_TIMEOUT_MS }).catch(() => {});
+					void sendMeta();
+					break;
+				}
+			}
+		} catch (err) {
+			send({ t: "error", msg: errorMessage(err).slice(0, 200) });
+		}
+	}
+
+	return new Response(null, { status: 101, webSocket: client });
+}
+
+// ---------------------------------------------------------------------------
 // /workspace/exec — R2 is the source of truth; the container is a cache that
 // is hydrated before and synced back after each command.
 // ---------------------------------------------------------------------------
@@ -1121,12 +1332,23 @@ export default {
 			return json({ ok: true });
 		}
 
+		const denied = await checkAuth(request, env);
+		if (denied) return denied;
+
+		// Live browser view is a GET WebSocket upgrade; everything else is POST.
+		if (pathname === "/browser/view") {
+			if (request.method !== "GET") return json({ error: "method not allowed" }, 405);
+			try {
+				return await handleBrowserView(request, env);
+			} catch (err) {
+				if (err instanceof HttpError) return json({ error: err.message }, err.status);
+				return json({ error: `internal error: ${errorMessage(err)}` }, 500);
+			}
+		}
+
 		const handler = POST_ROUTES[pathname];
 		if (!handler) return json({ error: "not found" }, 404);
 		if (request.method !== "POST") return json({ error: "method not allowed" }, 405);
-
-		const denied = await checkAuth(request, env);
-		if (denied) return denied;
 
 		try {
 			return await handler(request, env);

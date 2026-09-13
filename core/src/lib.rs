@@ -1,6 +1,7 @@
 mod agent;
 mod auth;
 mod azure;
+mod browser;
 mod config;
 mod crypto;
 mod db;
@@ -28,7 +29,7 @@ const DEV_ORIGINS: &[&str] = &["http://localhost:5173", "http://localhost:5174"]
 
 const SPA_CSP: &str = "default-src 'self'; script-src 'self'; \
     style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; \
-    img-src 'self' data: https://www.google.com; connect-src 'self' wss://agent.deepgram.com; \
+    img-src 'self' data: blob: https://www.google.com; connect-src 'self' wss://agent.deepgram.com; \
     frame-src 'self'; frame-ancestors 'none'; object-src 'none'; base-uri 'none'; form-action 'self'";
 const API_CSP: &str = "default-src 'none'; frame-ancestors 'none'";
 /// User content: inert, sandboxed, never scriptable on the app origin.
@@ -181,6 +182,9 @@ async fn route_authed(
     }
     if let Some(rest) = path.strip_prefix("/api/workspace/") {
         return workspace_route(req, &env, user_id, rest, method).await;
+    }
+    if path == "/api/browser/view" {
+        return browser::view(req, &env, user_id).await;
     }
     if let Some(rest) = path.strip_prefix("/api/voice/") {
         return voice::route(req, &env, user_id, &format!("/{}", rest), method).await;

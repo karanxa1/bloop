@@ -120,11 +120,16 @@ That one idea — *claims are worthless without receipts* — is the whole produ
 - **`delegate`** — spawns parallel *research* (read-only) or *build* (write + run code)
   subagents, each streaming into nested live cards.
 - **Parallel tool calls** — calls across different apps run concurrently, results stay ordered.
+- **Model selector** — pick the brain per message: `gpt-5.6-terra`, `gpt-5.6-sol`, or
+  `gpt-5.6-luna` from the composer, with automatic fallback if a model is unavailable.
 - **Modes** — `default` for everyday work, `think` (forces a plan first), `deep`
   (25 iterations, ≥2 sources, cited source chips).
+- **Command palette** — `⌘K` jumps to any conversation, tool, or action.
 
 ### Remembers, and gets better
 
+- **Chat history** — every conversation persists in D1; search, resume, or fork any of them
+  from the sidebar — nothing is lost between sessions.
 - **Memory** — `remember` / `forget` durable facts; bloop recalls them next session.
 - **Context file** — a user-editable standing brief injected into every run.
 - **Lessons file** — bloop records what failed and what it learned, so it doesn't repeat

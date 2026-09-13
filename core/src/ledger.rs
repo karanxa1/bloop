@@ -5,7 +5,9 @@ use std::collections::HashMap;
 
 thread_local! {
     static LEDGERS: RefCell<HashMap<String, Vec<Value>>> = RefCell::new(HashMap::new());
-    static LAST_RUN: RefCell<String> = RefCell::new(String::new());
+    /// user_id → that user's latest run_id. A user's older run is evicted when a
+    /// new one begins, so memory stays bounded by active users in the isolate.
+    static LAST_RUN: RefCell<HashMap<String, String>> = RefCell::new(HashMap::new());
 }
 
 pub fn sha256_hex(data: &str) -> String {
@@ -14,9 +16,15 @@ pub fn sha256_hex(data: &str) -> String {
     h.finalize().iter().map(|b| format!("{:02x}", b)).collect()
 }
 
-pub fn begin_run(run_id: &str) {
-    LEDGERS.with(|l| l.borrow_mut().insert(run_id.to_string(), Vec::new()));
-    LAST_RUN.with(|l| *l.borrow_mut() = run_id.to_string());
+pub fn begin_run(user_id: &str, run_id: &str) {
+    let prev = LAST_RUN.with(|l| l.borrow_mut().insert(user_id.to_string(), run_id.to_string()));
+    LEDGERS.with(|l| {
+        let mut l = l.borrow_mut();
+        if let Some(prev) = prev.filter(|p| p != run_id) {
+            l.remove(&prev);
+        }
+        l.insert(run_id.to_string(), Vec::new());
+    });
 }
 
 pub fn record(run_id: &str, entry: Value) {
@@ -59,9 +67,30 @@ pub fn attest(run_id: &str, claim: &str, evidence: &str, app: &str) -> String {
     hash
 }
 
-pub fn last_run_entries() -> Vec<Value> {
-    LAST_RUN.with(|lr| {
-        let id = lr.borrow().clone();
-        LEDGERS.with(|l| l.borrow().get(&id).cloned().unwrap_or_default())
-    })
+/// Entries of `user_id`'s latest run in this isolate (never another user's).
+pub fn last_run_entries(user_id: &str) -> Vec<Value> {
+    let Some(run_id) = LAST_RUN.with(|l| l.borrow().get(user_id).cloned()) else {
+        return Vec::new();
+    };
+    LEDGERS.with(|l| l.borrow().get(&run_id).cloned().unwrap_or_default())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn ledgers_are_per_user_and_evict_old_runs() {
+        begin_run("alice", "run-a1");
+        record("run-a1", json!({"type": "tool_call"}));
+        begin_run("bob", "run-b1");
+        record("run-b1", json!({"type": "plan"}));
+        assert_eq!(last_run_entries("alice").len(), 1);
+        assert_eq!(last_run_entries("bob")[0]["type"], "plan");
+        assert!(last_run_entries("mallory").is_empty());
+        begin_run("alice", "run-a2");
+        assert!(last_run_entries("alice").is_empty());
+        assert!(LEDGERS.with(|l| !l.borrow().contains_key("run-a1")));
+        assert_eq!(last_run_entries("bob").len(), 1);
+    }
 }

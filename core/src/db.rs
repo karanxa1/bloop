@@ -39,6 +39,92 @@ pub async fn delete_session(env: &Env, token: &str) {
     }
 }
 
+// ---------- rate limits / quotas / cache (KV) ----------
+
+/// KV key for a fixed-window counter: `rl:<scope>:<subject>:<window index>`.
+pub fn rate_key(scope: &str, subject: &str, now_s: u64, window_s: u64) -> String {
+    format!("rl:{}:{}:{}", scope, subject, now_s / window_s.max(1))
+}
+
+/// Count one hit on a fixed-window KV counter; returns false once `limit` is
+/// reached. KV is eventually consistent, so this is a soft limit. Fails open
+/// if KV is unavailable.
+pub async fn rate_hit(env: &Env, key: &str, limit: u32, window_s: u64) -> bool {
+    let Ok(kv) = env.kv("SESSIONS") else {
+        return true;
+    };
+    let n: u32 = kv
+        .get(key)
+        .text()
+        .await
+        .ok()
+        .flatten()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(0);
+    if n >= limit {
+        return false;
+    }
+    if let Ok(put) = kv.put(key, (n + 1).to_string()) {
+        let _ = put.expiration_ttl(window_s.max(60) + 60).execute().await;
+    }
+    true
+}
+
+/// Hourly per-user quota for costly sandbox tools: (quota name, calls per hour).
+pub fn quota_for(tool: &str) -> Option<(&'static str, u32)> {
+    match tool {
+        "run_code" => Some(("run_code", 120)),
+        "browse" | "browser_handoff" => Some(("browse", 60)),
+        "workspace_exec" => Some(("exec", 60)),
+        _ => None,
+    }
+}
+
+/// Count one use of `tool` against `user_id`'s hourly quota. Err carries the
+/// user-facing message when the quota is exhausted.
+pub async fn quota_hit(env: &Env, user_id: &str, tool: &str) -> std::result::Result<(), String> {
+    let Some((name, limit)) = quota_for(tool) else {
+        return Ok(());
+    };
+    let now = Date::now().as_millis() / 1000;
+    if rate_hit(env, &rate_key(&format!("quota:{}", name), user_id, now, 3600), limit, 3600).await {
+        Ok(())
+    } else {
+        Err(format!("hourly {} quota reached ({} per hour) — try again later", name, limit))
+    }
+}
+
+pub async fn cache_get(env: &Env, key: &str) -> Option<Value> {
+    let kv = env.kv("SESSIONS").ok()?;
+    kv.get(key).json::<Value>().await.ok().flatten()
+}
+
+pub async fn cache_put(env: &Env, key: &str, value: &Value, ttl_s: u64) {
+    if let Ok(kv) = env.kv("SESSIONS") {
+        if let Ok(put) = kv.put(key, value.to_string()) {
+            let _ = put.expiration_ttl(ttl_s.max(60)).execute().await;
+        }
+    }
+}
+
+/// KV key for public-server states shown by the unauthenticated /api/health.
+pub const HEALTH_CACHE_KEY: &str = "cache:health:servers";
+
+/// Record public server states for /api/health, writing at most once a minute.
+pub async fn refresh_health_cache(env: &Env, states: Vec<Value>) {
+    if states.is_empty() {
+        return;
+    }
+    let now = Date::now().as_millis();
+    let fresh = cache_get(env, HEALTH_CACHE_KEY)
+        .await
+        .and_then(|c| c.get("ts").and_then(|t| t.as_u64()))
+        .is_some_and(|ts| now.saturating_sub(ts) < 60_000);
+    if !fresh {
+        cache_put(env, HEALTH_CACHE_KEY, &json!({"ts": now, "servers": states}), 3600).await;
+    }
+}
+
 // ---------- users ----------
 
 pub async fn user_by_email(env: &Env, email: &str) -> Result<Option<Value>> {
@@ -104,6 +190,150 @@ pub async fn get_conversation(env: &Env, user_id: &str, id: &str) -> Result<Opti
     .bind(&[js(id), js(user_id)])?
     .first::<Value>(None)
     .await
+}
+
+/// Rows changed by a write.
+fn changed(res: &D1Result) -> bool {
+    res.meta().ok().flatten().and_then(|m| m.changes).unwrap_or(0) > 0
+}
+
+// ---------- skills ----------
+
+const SKILL_COLS: &str = "id, name, description, body, source, enabled, created_at, updated_at";
+
+pub async fn list_skills(env: &Env, user_id: &str) -> Result<Vec<Value>> {
+    let db = env.d1("DB")?;
+    db.prepare(format!("SELECT {SKILL_COLS} FROM skills WHERE user_id = ?1 ORDER BY name"))
+        .bind(&[js(user_id)])?
+        .all()
+        .await?
+        .results::<Value>()
+}
+
+/// A skill looked up by id or name.
+pub async fn get_skill(env: &Env, user_id: &str, key: &str) -> Result<Option<Value>> {
+    let db = env.d1("DB")?;
+    db.prepare(format!(
+        "SELECT {SKILL_COLS} FROM skills WHERE user_id = ?1 AND (id = ?2 OR name = ?2)"
+    ))
+    .bind(&[js(user_id), js(key)])?
+    .first::<Value>(None)
+    .await
+}
+
+pub async fn create_skill(
+    env: &Env,
+    user_id: &str,
+    name: &str,
+    description: &str,
+    body: &str,
+    source: &str,
+    enabled: bool,
+) -> Result<Value> {
+    let db = env.d1("DB")?;
+    let id = crypto::uuid();
+    db.prepare(
+        "INSERT INTO skills (id, user_id, name, description, body, source, enabled) \
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+    )
+    .bind(&[
+        js(&id),
+        js(user_id),
+        js(name),
+        js(description),
+        js(body),
+        js(source),
+        JsValue::from_f64(if enabled { 1.0 } else { 0.0 }),
+    ])?
+    .run()
+    .await?;
+    Ok(json!({"id": id, "name": name, "description": description, "body": body, "source": source, "enabled": enabled}))
+}
+
+/// Patch a skill by id; `None` fields stay unchanged. Returns whether a row changed.
+pub async fn update_skill(
+    env: &Env,
+    user_id: &str,
+    id: &str,
+    name: Option<&str>,
+    description: Option<&str>,
+    body: Option<&str>,
+    enabled: Option<bool>,
+) -> Result<bool> {
+    let db = env.d1("DB")?;
+    let opt = |v: Option<&str>| v.map(js).unwrap_or(JsValue::NULL);
+    let res = db
+        .prepare(
+            "UPDATE skills SET name = COALESCE(?3, name), description = COALESCE(?4, description), \
+             body = COALESCE(?5, body), enabled = COALESCE(?6, enabled), updated_at = datetime('now') \
+             WHERE id = ?1 AND user_id = ?2",
+        )
+        .bind(&[
+            js(id),
+            js(user_id),
+            opt(name),
+            opt(description),
+            opt(body),
+            enabled.map_or(JsValue::NULL, |b| JsValue::from_f64(if b { 1.0 } else { 0.0 })),
+        ])?
+        .run()
+        .await?;
+    Ok(changed(&res))
+}
+
+pub async fn delete_skill(env: &Env, user_id: &str, id: &str) -> Result<bool> {
+    let db = env.d1("DB")?;
+    let res = db
+        .prepare("DELETE FROM skills WHERE id = ?1 AND user_id = ?2")
+        .bind(&[js(id), js(user_id)])?
+        .run()
+        .await?;
+    Ok(changed(&res))
+}
+
+// ---------- user settings ----------
+
+pub async fn disabled_tools(env: &Env, user_id: &str) -> Result<Vec<String>> {
+    let db = env.d1("DB")?;
+    let row = db
+        .prepare("SELECT disabled_tools_json FROM user_settings WHERE user_id = ?1")
+        .bind(&[js(user_id)])?
+        .first::<Value>(None)
+        .await?;
+    Ok(row
+        .as_ref()
+        .and_then(|r| r.get("disabled_tools_json"))
+        .and_then(|v| v.as_str())
+        .and_then(|s| serde_json::from_str::<Vec<String>>(s).ok())
+        .unwrap_or_default())
+}
+
+pub async fn set_disabled_tools(env: &Env, user_id: &str, names: &[String]) -> Result<()> {
+    let db = env.d1("DB")?;
+    let list = serde_json::to_string(names).unwrap_or_else(|_| "[]".into());
+    db.prepare(
+        "INSERT INTO user_settings (user_id, disabled_tools_json, updated_at) VALUES (?1, ?2, datetime('now')) \
+         ON CONFLICT(user_id) DO UPDATE SET disabled_tools_json = excluded.disabled_tools_json, updated_at = excluded.updated_at",
+    )
+    .bind(&[js(user_id), js(&list)])?
+    .run()
+    .await?;
+    Ok(())
+}
+
+/// Whether any message in the user's own conversations contains `needle`
+/// (used to authorize legacy, unscoped `/files/` keys).
+pub async fn user_references(env: &Env, user_id: &str, needle: &str) -> Result<bool> {
+    let db = env.d1("DB")?;
+    let row = db
+        .prepare(
+            "SELECT 1 AS hit FROM messages m JOIN conversations c ON c.id = m.conversation_id \
+             WHERE c.user_id = ?1 AND instr(m.parts_json, ?2) > 0 LIMIT 1",
+        )
+        .bind(&[js(user_id), js(needle)])?
+        .first::<Value>(None)
+        .await?;
+    Ok(row.is_some())
 }
 
 pub async fn rename_conversation(env: &Env, user_id: &str, id: &str, title: &str) -> Result<bool> {
@@ -330,15 +560,6 @@ pub async fn append_lesson(env: &Env, user_id: &str, lesson: &str) -> Result<()>
 
 // ---------- servers ----------
 
-pub async fn list_user_servers(env: &Env, user_id: &str) -> Result<Vec<Value>> {
-    let db = env.d1("DB")?;
-    let res = db
-        .prepare("SELECT id, name, url, token, created_at FROM servers WHERE user_id = ?1 ORDER BY created_at")
-        .bind(&[js(user_id)])?
-        .all()
-        .await?;
-    res.results::<Value>()
-}
 
 pub async fn add_user_server(env: &Env, user_id: &str, name: &str, url: &str, token: &str) -> Result<Value> {
     let db = env.d1("DB")?;
@@ -359,15 +580,176 @@ pub async fn delete_user_server(env: &Env, user_id: &str, id: &str) -> Result<()
     Ok(())
 }
 
-pub async fn count_user_servers(env: &Env) -> i64 {
-    if let Ok(db) = env.d1("DB") {
-        if let Ok(n) = db
-            .prepare("SELECT COUNT(*) AS c FROM servers")
-            .first::<i64>(Some("c"))
-            .await
-        {
-            return n.unwrap_or(0);
-        }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn rate_keys_bucket_by_window() {
+        assert_eq!(rate_key("login", "ip:1.2.3.4", 1_200, 600), "rl:login:ip:1.2.3.4:2");
+        assert_eq!(rate_key("login", "ip:1.2.3.4", 1_799, 600), rate_key("login", "ip:1.2.3.4", 1_200, 600));
+        assert_ne!(rate_key("login", "ip:1.2.3.4", 1_800, 600), rate_key("login", "ip:1.2.3.4", 1_200, 600));
+        assert_ne!(rate_key("login", "a", 0, 600), rate_key("signup", "a", 0, 600));
+        assert_eq!(rate_key("x", "y", 5, 0), "rl:x:y:5");
     }
-    0
+
+    #[test]
+    fn quotas_cover_costly_tools_only() {
+        assert_eq!(quota_for("workspace_exec"), Some(("exec", 60)));
+        assert_eq!(quota_for("browser_handoff").map(|q| q.0), Some("browse"));
+        assert!(quota_for("run_code").is_some());
+        assert!(quota_for("remember").is_none());
+    }
+}
+
+// ---------- server configs / oauth clients (marketplace) ----------
+
+const SERVER_FULL_SELECT: &str = "SELECT s.id, s.name, s.url, s.token, s.created_at, \
+     COALESCE(c.transport, 'auto') AS transport, \
+     COALESCE(c.auth_type, CASE WHEN s.token = '' THEN 'none' ELSE 'bearer' END) AS auth_type, \
+     COALESCE(c.headers_json, '{}') AS headers_json, \
+     COALESCE(c.enabled, 1) AS enabled, \
+     COALESCE(c.oauth_json, '{}') AS oauth_json, \
+     COALESCE(c.catalog_slug, '') AS catalog_slug \
+     FROM servers s LEFT JOIN server_configs c ON c.server_id = s.id";
+
+fn opt_js(v: Option<&str>) -> JsValue {
+    v.map(js).unwrap_or(JsValue::NULL)
+}
+
+/// User servers joined with their config (defaults for legacy rows).
+pub async fn list_user_servers_full(env: &Env, user_id: &str) -> Result<Vec<Value>> {
+    let db = env.d1("DB")?;
+    let sql = format!("{} WHERE s.user_id = ?1 ORDER BY s.created_at", SERVER_FULL_SELECT);
+    db.prepare(&sql).bind(&[js(user_id)])?.all().await?.results::<Value>()
+}
+
+pub async fn get_user_server_full(env: &Env, user_id: &str, id: &str) -> Result<Option<Value>> {
+    let db = env.d1("DB")?;
+    let sql = format!("{} WHERE s.user_id = ?1 AND s.id = ?2", SERVER_FULL_SELECT);
+    db.prepare(&sql).bind(&[js(user_id), js(id)])?.first::<Value>(None).await
+}
+
+pub async fn put_server_config(
+    env: &Env,
+    server_id: &str,
+    transport: &str,
+    auth_type: &str,
+    headers_json: &str,
+    catalog_slug: Option<&str>,
+) -> Result<()> {
+    let db = env.d1("DB")?;
+    db.prepare(
+        "INSERT INTO server_configs (server_id, transport, auth_type, headers_json, catalog_slug) \
+         VALUES (?1, ?2, ?3, ?4, ?5) ON CONFLICT(server_id) DO UPDATE SET transport = excluded.transport, \
+         auth_type = excluded.auth_type, headers_json = excluded.headers_json, \
+         catalog_slug = excluded.catalog_slug, updated_at = datetime('now')",
+    )
+    .bind(&[js(server_id), js(transport), js(auth_type), js(headers_json), opt_js(catalog_slug)])?
+    .run()
+    .await?;
+    Ok(())
+}
+
+/// Create a default config row for a legacy server (no-op if present / server missing).
+async fn ensure_server_config(env: &Env, server_id: &str) -> Result<()> {
+    let db = env.d1("DB")?;
+    db.prepare(
+        "INSERT INTO server_configs (server_id, auth_type) \
+         SELECT id, CASE WHEN token = '' THEN 'none' ELSE 'bearer' END FROM servers WHERE id = ?1 \
+         ON CONFLICT(server_id) DO NOTHING",
+    )
+    .bind(&[js(server_id)])?
+    .run()
+    .await?;
+    Ok(())
+}
+
+pub async fn update_user_server(env: &Env, user_id: &str, id: &str, name: Option<&str>, token: Option<&str>) -> Result<()> {
+    let db = env.d1("DB")?;
+    db.prepare("UPDATE servers SET name = COALESCE(?1, name), token = COALESCE(?2, token) WHERE id = ?3 AND user_id = ?4")
+        .bind(&[opt_js(name), opt_js(token), js(id), js(user_id)])?
+        .run()
+        .await?;
+    Ok(())
+}
+
+/// Caller must have verified ownership of `server_id`.
+pub async fn update_server_config(
+    env: &Env,
+    server_id: &str,
+    enabled: Option<bool>,
+    headers_json: Option<&str>,
+    auth_type: Option<&str>,
+) -> Result<()> {
+    ensure_server_config(env, server_id).await?;
+    let db = env.d1("DB")?;
+    let enabled = enabled
+        .map(|b| JsValue::from_f64(if b { 1.0 } else { 0.0 }))
+        .unwrap_or(JsValue::NULL);
+    db.prepare(
+        "UPDATE server_configs SET enabled = COALESCE(?1, enabled), headers_json = COALESCE(?2, headers_json), \
+         auth_type = COALESCE(?3, auth_type), updated_at = datetime('now') WHERE server_id = ?4",
+    )
+    .bind(&[enabled, opt_js(headers_json), opt_js(auth_type), js(server_id)])?
+    .run()
+    .await?;
+    Ok(())
+}
+
+/// Store OAuth tokens (JSON) and mark the server as OAuth-authenticated.
+pub async fn set_server_oauth(env: &Env, server_id: &str, oauth_json: &str) -> Result<()> {
+    ensure_server_config(env, server_id).await?;
+    let db = env.d1("DB")?;
+    db.prepare("UPDATE server_configs SET oauth_json = ?1, auth_type = 'oauth', updated_at = datetime('now') WHERE server_id = ?2")
+        .bind(&[js(oauth_json), js(server_id)])?
+        .run()
+        .await?;
+    Ok(())
+}
+
+pub async fn delete_orphan_server_config(env: &Env, server_id: &str) -> Result<()> {
+    let db = env.d1("DB")?;
+    db.prepare("DELETE FROM server_configs WHERE server_id = ?1 AND NOT EXISTS (SELECT 1 FROM servers WHERE id = ?1)")
+        .bind(&[js(server_id)])?
+        .run()
+        .await?;
+    Ok(())
+}
+
+/// Stored OAuth JSON for a server (internal: refresh-lock re-read).
+pub async fn get_server_oauth(env: &Env, server_id: &str) -> Result<Option<String>> {
+    let db = env.d1("DB")?;
+    db.prepare("SELECT oauth_json FROM server_configs WHERE server_id = ?1")
+        .bind(&[js(server_id)])?
+        .first::<String>(Some("oauth_json"))
+        .await
+}
+
+pub async fn get_oauth_client(env: &Env, auth_server: &str, redirect_uri: &str) -> Result<Option<Value>> {
+    let db = env.d1("DB")?;
+    db.prepare("SELECT client_id, client_secret, registration_json FROM oauth_clients WHERE auth_server = ?1 AND redirect_uri = ?2")
+        .bind(&[js(auth_server), js(redirect_uri)])?
+        .first::<Value>(None)
+        .await
+}
+
+pub async fn put_oauth_client(
+    env: &Env,
+    auth_server: &str,
+    redirect_uri: &str,
+    client_id: &str,
+    client_secret: &str,
+    registration_json: &str,
+) -> Result<()> {
+    let db = env.d1("DB")?;
+    db.prepare(
+        "INSERT OR REPLACE INTO oauth_clients (auth_server, redirect_uri, client_id, client_secret, registration_json) \
+         VALUES (?1, ?2, ?3, ?4, ?5)",
+    )
+    .bind(&[js(auth_server), js(redirect_uri), js(client_id), js(client_secret), js(registration_json)])?
+    .run()
+    .await?;
+    Ok(())
 }

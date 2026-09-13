@@ -56,3 +56,49 @@ CREATE TABLE IF NOT EXISTS user_files (
   updated_at TEXT NOT NULL DEFAULT (datetime('now')),
   PRIMARY KEY (user_id, kind)
 );
+
+-- skills: reusable procedures (system prompt lists name — description; use_skill loads body)
+CREATE TABLE IF NOT EXISTS skills (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  description TEXT NOT NULL,
+  body TEXT NOT NULL,
+  source TEXT NOT NULL DEFAULT 'user' CHECK (source IN ('user', 'agent', 'catalog')),
+  enabled INTEGER NOT NULL DEFAULT 1,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE (user_id, name)
+);
+CREATE INDEX IF NOT EXISTS idx_skills_user ON skills(user_id);
+
+-- per-user settings (built-in tool toggles)
+CREATE TABLE IF NOT EXISTS user_settings (
+  user_id TEXT PRIMARY KEY,
+  disabled_tools_json TEXT NOT NULL DEFAULT '[]',
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- MCP marketplace: per-server transport/auth config (additive; legacy servers
+-- rows without a config use defaults). Secrets never leave the worker.
+CREATE TABLE IF NOT EXISTS server_configs (
+  server_id TEXT PRIMARY KEY REFERENCES servers(id) ON DELETE CASCADE,
+  transport TEXT NOT NULL DEFAULT 'auto' CHECK (transport IN ('auto', 'streamable_http', 'sse')),
+  auth_type TEXT NOT NULL DEFAULT 'bearer' CHECK (auth_type IN ('none', 'bearer', 'headers', 'oauth')),
+  headers_json TEXT NOT NULL DEFAULT '{}',
+  enabled INTEGER NOT NULL DEFAULT 1,
+  oauth_json TEXT NOT NULL DEFAULT '{}',
+  catalog_slug TEXT,
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- OAuth dynamic client registrations, cached per authorization server
+CREATE TABLE IF NOT EXISTS oauth_clients (
+  auth_server TEXT NOT NULL,
+  redirect_uri TEXT NOT NULL,
+  client_id TEXT NOT NULL,
+  client_secret TEXT NOT NULL DEFAULT '',
+  registration_json TEXT NOT NULL DEFAULT '{}',
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  PRIMARY KEY (auth_server, redirect_uri)
+);

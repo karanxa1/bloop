@@ -83,16 +83,6 @@ pub async fn signup(mut req: Request, env: Env) -> Result<Response> {
         .unwrap_or("")
         .trim()
         .to_string();
-    let invite = body
-        .get("invite_code")
-        .and_then(|v| v.as_str())
-        .unwrap_or("");
-
-    if let Some(required) = config::env_str(&env, "INVITE_CODE") {
-        if invite != required {
-            return json_err("invalid invite code", 403);
-        }
-    }
     if email.is_empty() || !email.contains('@') {
         return json_err("invalid email", 400);
     }

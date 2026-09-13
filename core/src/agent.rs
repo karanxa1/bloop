@@ -17,6 +17,8 @@ use worker::*;
 
 const MAX_ITERS: usize = 15;
 const DEEP_MAX_ITERS: usize = 25;
+/// Azure rejects a tools array above 128; keep headroom for built-ins.
+const MAX_SENT_TOOLS: usize = 120;
 const SUB_MAX_ITERS: usize = 8;
 const BUILD_MAX_ITERS: usize = 12;
 /// Model-context cap for tools whose output is code or build logs.
@@ -936,6 +938,10 @@ struct Ctx {
     browser: futures::lock::Mutex<()>,
     /// Per-run MCP circuit breaker (shared with subagents).
     breaker: Breaker,
+    /// MCP tool names (call_as) the model has pulled via `load_tools`. When the
+    /// full tool list would exceed MAX_SENT_TOOLS, only loaded MCP tools are
+    /// sent — `load_tools` is the gate.
+    loaded: futures::lock::Mutex<std::collections::HashSet<String>>,
     out: Emitter,
 }
 
@@ -2101,6 +2107,13 @@ async fn dispatch(ctx: &Ctx, call: &Call, parent: Option<Parent<'_>>) -> ToolOut
                 found.retain(|t| !is_mutating(str_at(t, "name")));
             }
             let names: Vec<&str> = found.iter().map(|t| str_at(t, "call_as")).collect();
+            {
+                // The pulled schemas join the outgoing tools array on the next turn.
+                let mut loaded = ctx.loaded.lock().await;
+                for n in &names {
+                    loaded.insert((*n).to_string());
+                }
+            }
             let loaded = json!({"names": names});
             simple_outcome(
                 "bloop",
@@ -2307,19 +2320,43 @@ async fn model_turn(
 
 // ---------- subagents ----------
 
-fn subagent_tools(ctx: &Ctx, me: Parent<'_>) -> Vec<Value> {
-    let mut tools: Vec<Value> = builtin_tools()
-        .into_iter()
-        .filter(|t| me.allows(tool_name(t)) && tools_registry::is_enabled(tool_name(t), &ctx.disabled))
-        .collect();
-    for (server, list) in &ctx.all_tools {
-        tools.extend(
+/// Tools to send on a model call. Under the Azure cap (128; we keep 120) every
+/// eligible MCP schema goes; over it, only tools the model has pulled via
+/// `load_tools` are sent — load_tools is a built-in, so the model can always
+/// pull more. `mcp_filter` restricts eligibility (e.g. subagents never see
+/// mutating tools).
+fn sent_tools(
+    builtin: &[Value],
+    all_tools: &[(String, Vec<Value>)],
+    loaded: futures::lock::MutexGuard<'_, std::collections::HashSet<String>>,
+    mcp_filter: impl Fn(&Value) -> bool,
+) -> Vec<Value> {
+    let mcp: Vec<Value> = all_tools
+        .iter()
+        .flat_map(|(server, list)| {
             list.iter()
-                .filter(|t| !is_mutating(str_at(t, "name")))
-                .map(|t| mcp_tool_to_openai(server, t)),
-        );
+                .filter(|t| mcp_filter(t))
+                .map(|t| mcp_tool_to_openai(server, t))
+        })
+        .collect();
+    let mut tools = builtin.to_vec();
+    if builtin.len() + mcp.len() <= MAX_SENT_TOOLS {
+        tools.extend(mcp);
+    } else {
+        tools.extend(mcp.into_iter().filter(|t| loaded.contains(tool_name(t))));
+    }
+    // Backstop: even a huge loaded set must stay under the provider cap.
+    if tools.len() > MAX_SENT_TOOLS {
+        tools.truncate(MAX_SENT_TOOLS);
     }
     tools
+}
+
+fn subagent_tools(ctx: &Ctx, me: Parent<'_>) -> Vec<Value> {
+    builtin_tools()
+        .into_iter()
+        .filter(|t| me.allows(tool_name(t)) && tools_registry::is_enabled(tool_name(t), &ctx.disabled))
+        .collect()
 }
 
 /// Lazily open a subagent's own MCP sessions for the servers `calls` touch.
@@ -2352,7 +2389,7 @@ fn run_subagent<'a>(ctx: &'a Ctx, call: &'a Call) -> LocalBoxFuture<'a, ToolOutc
         let me = Parent { id, build };
         ctx.out.emit("subagent_start", json!({"id": id, "task": task, "kind": kind}));
 
-        let tools = subagent_tools(ctx, me);
+        let base_tools = subagent_tools(ctx, me);
         let mut prompt = task.to_string();
         let hint = str_at(&call.args, "tools_hint").trim();
         if !hint.is_empty() {
@@ -2377,6 +2414,13 @@ fn run_subagent<'a>(ctx: &'a Ctx, call: &'a Call) -> LocalBoxFuture<'a, ToolOutc
         let mut result = None;
         let max_iters = if build { BUILD_MAX_ITERS } else { SUB_MAX_ITERS };
         for iter in 0..max_iters {
+            // Rebuild each turn so tools pulled via load_tools appear on the next call.
+            let tools = sent_tools(
+                &base_tools,
+                &ctx.all_tools,
+                ctx.loaded.lock().await,
+                |t| !is_mutating(str_at(t, "name")),
+            );
             let reply = match model_turn(ctx, &messages, &tools, &Value::Null, &on_text).await {
                 Ok(r) => r,
                 Err(e) => {
@@ -2751,7 +2795,9 @@ async fn drive(o: RunOpts, tx: mpsc::UnboundedSender<Frame>) {
 
     let mut clients = conn.clients;
     let public_states = conn.public_states;
-    let mut tools: Vec<Value> = builtin_tools()
+    // Built-ins only — the per-iteration `sent_tools` adds the MCP schemas
+    // (all of them when under the cap, or just the load_tools-pulled ones).
+    let base_tools: Vec<Value> = builtin_tools()
         .into_iter()
         .filter(|t| tools_registry::is_enabled(tool_name(t), &disabled))
         .collect();
@@ -2760,9 +2806,6 @@ async fn drive(o: RunOpts, tx: mpsc::UnboundedSender<Frame>) {
     } else {
         String::new()
     };
-    for (server, list) in &conn.all_tools {
-        tools.extend(list.iter().map(|t| mcp_tool_to_openai(server, t)));
-    }
     let connected: Vec<String> = conn.all_tools.iter().map(|(n, _)| n.clone()).collect();
     let mut models = vec![o.model.clone()];
     if o.cfg.model_fallback != o.model && crate::config::model_allowed(&o.cfg.model_fallback) {
@@ -2781,6 +2824,7 @@ async fn drive(o: RunOpts, tx: mpsc::UnboundedSender<Frame>) {
         disabled,
         browser: futures::lock::Mutex::new(()),
         breaker: Breaker::default(),
+        loaded: futures::lock::Mutex::new(std::collections::HashSet::new()),
         out,
     };
 
@@ -2811,6 +2855,9 @@ async fn drive(o: RunOpts, tx: mpsc::UnboundedSender<Frame>) {
         } else {
             Value::Null
         };
+        // Rebuild each turn: over the Azure cap the array is just built-ins plus
+        // whatever load_tools has pulled, so a fresh pull is visible next call.
+        let tools = sent_tools(&base_tools, &ctx.all_tools, ctx.loaded.lock().await, |_| true);
         let reply = match model_turn(&ctx, &messages, &tools, &extra, &on_text).await {
             Ok(r) => r,
             Err(e) => {
@@ -3043,6 +3090,36 @@ mod tests {
         for t in tools_registry::REGISTRY {
             assert!(names.iter().any(|n| n == t.name), "{} not a builtin", t.name);
         }
+    }
+
+    #[test]
+    fn sent_tools_respects_the_cap() {
+        let builtin = builtin_tools();
+        // A server with far more tools than the provider allows.
+        let big: Vec<Value> = (0..200)
+            .map(|i| json!({"name": format!("tool_{i}"), "description": "d", "inputSchema": {"type": "object"}}))
+            .collect();
+        let all = vec![("big".to_string(), big)];
+
+        // Over the cap: only load_tools-pulled schemas go out, plus built-ins.
+        let mut set = std::collections::HashSet::new();
+        set.insert("big__tool_5".to_string());
+        set.insert("big__tool_9".to_string());
+        let loaded = futures::lock::Mutex::new(set);
+        let out = sent_tools(&builtin, &all, loaded.try_lock().unwrap(), |_| true);
+        assert_eq!(out.len(), builtin.len() + 2);
+        assert!(out.iter().any(|t| tool_name(t) == "big__tool_5"));
+        assert!(out.iter().any(|t| tool_name(t) == "big__tool_9"));
+        assert!(!out.iter().any(|t| tool_name(t) == "big__tool_0"));
+        assert!(out.len() <= MAX_SENT_TOOLS);
+
+        // Under the cap: everything goes.
+        let small = vec![json!({"name": "only", "description": "d", "inputSchema": {"type": "object"}})];
+        let all_small = vec![("s".to_string(), small)];
+        let loaded = futures::lock::Mutex::new(std::collections::HashSet::new());
+        let out = sent_tools(&builtin, &all_small, loaded.try_lock().unwrap(), |_| true);
+        assert_eq!(out.len(), builtin.len() + 1);
+        assert!(out.iter().any(|t| tool_name(t) == "s__only"));
     }
 
     #[test]

@@ -1,0 +1,154 @@
+name: deploy
+
+# Builds and deploys the whole stack on every push to main:
+#   sandbox worker (only when sandbox/ changed) → D1 schema → core worker (+ SPA assets) → smoke test.
+# Required repo secrets: CLOUDFLARE_API_TOKEN (Workers Scripts/Containers/D1/R2/KV/Browser Rendering: Edit).
+# Worker runtime secrets (AZURE_OPENAI_API_KEY, SANDBOX_TOKEN, …) already live in Cloudflare and are not touched.
+# NEVER deploy from the repo root — its wrangler.jsonc is the old TS starter.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      force_sandbox:
+        description: "deploy the sandbox worker even if sandbox/ is unchanged"
+        type: boolean
+        default: false
+
+concurrency:
+  group: deploy-prod
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  pull-requests: read
+
+env:
+  CLOUDFLARE_ACCOUNT_ID: 337c662fed500c2dff530141baaf75c9
+  WRANGLER_VERSION: 4.129.0
+  APP_URL: https://bloop.rough-cell-383c.workers.dev
+
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    outputs:
+      sandbox: ${{ steps.changes.outputs.sandbox }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: changes
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            sandbox:
+              - 'sandbox/**'
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            web/package-lock.json
+            sandbox/package-lock.json
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: core
+
+      - name: core — cargo check (wasm32)
+        working-directory: core
+        run: cargo check --target wasm32-unknown-unknown --locked
+
+      - name: sandbox — typecheck
+        working-directory: sandbox
+        run: npm ci && npm run typecheck
+
+      - name: web — build
+        working-directory: web
+        run: npm ci && npm run build
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: web-dist
+          path: web/dist
+          retention-days: 3
+
+  deploy-sandbox:
+    needs: check
+    if: needs.check.outputs.sandbox == 'true' || inputs.force_sandbox
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: sandbox/package-lock.json
+      - name: deploy bloop-sandbox (builds the container image with docker)
+        working-directory: sandbox
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: npm ci && npx wrangler deploy --config wrangler.toml
+
+  deploy-core:
+    needs: [check, deploy-sandbox]
+    # run even when deploy-sandbox was skipped, but never after a failure
+    if: always() && needs.check.result == 'success' && needs.deploy-sandbox.result != 'failure' && needs.deploy-sandbox.result != 'cancelled'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: web-dist
+          path: web/dist
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: core
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: d1 schema (idempotent — CREATE … IF NOT EXISTS)
+        working-directory: core
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: npx -y wrangler@${WRANGLER_VERSION} d1 execute bloop-db --remote --file schema.sql
+
+      - name: deploy bloop core worker
+        working-directory: core
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: npx -y wrangler@${WRANGLER_VERSION} deploy --config wrangler.toml
+
+  smoke:
+    needs: deploy-core
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: health + app shell respond
+        run: |
+          set -euo pipefail
+          for i in 1 2 3 4 5; do
+            if curl -fsS "$APP_URL/api/health" | tee /tmp/health.json | grep -q '"ok":true'; then break; fi
+            sleep 6
+          done
+          grep -q '"ok":true' /tmp/health.json
+          curl -fsS -o /dev/null -w 'app %{http_code}\n' "$APP_URL/app"
+          curl -fsS -o /dev/null -w 'landing %{http_code}\n' "$APP_URL/"
+          code=$(curl -s -o /dev/null -w '%{http_code}' "$APP_URL/api/files/context")
+          test "$code" = "401" # auth guard intact

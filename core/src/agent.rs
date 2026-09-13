@@ -603,8 +603,9 @@ fn base_prompt() -> &'static str {
      Discipline:\n\
      - PLAN: for multi-step requests call update_plan first; keep steps concrete; mark steps \
      active/done/failed as you go.\n\
-     - ACT: use tools to take real actions. If unsure what tools exist, call load_tools with a \
-     keyword query to discover the right one.\n\
+     - ACT: use tools to take real actions. App tools are NOT preloaded — to use any connected \
+     app you MUST first call load_tools with a keyword query (server name, object, or action, \
+     e.g. 'github issue create') to pull the tool schemas you need, then call them.\n\
      - VERIFY: after ANY mutating call (create/update/send/post/delete) you MUST read back the \
      artifact with an independent read call before claiming success; then call attest with \
      claim + concrete evidence (id, url, or excerpt).\n\
@@ -675,7 +676,7 @@ fn system_prompt(
         p.push_str("none connected — only built-in tools are available.");
     } else {
         p.push_str(&servers.join(", "));
-        p.push_str("\nTools from a server are named <server>__<tool>.");
+        p.push_str("\nTools from a server are named <server>__<tool>; discover them with load_tools before calling.");
     }
     if !summary.is_empty() {
         p.push_str("\n\n## conversation so far (summary)\n");
@@ -2320,31 +2321,28 @@ async fn model_turn(
 
 // ---------- subagents ----------
 
-/// Tools to send on a model call. Under the Azure cap (128; we keep 120) every
-/// eligible MCP schema goes; over it, only tools the model has pulled via
-/// `load_tools` are sent — load_tools is a built-in, so the model can always
-/// pull more. `mcp_filter` restricts eligibility (e.g. subagents never see
-/// mutating tools).
+/// Tools to send on a model call. MCP schemas are never sent wholesale: only
+/// tools the model has pulled via `load_tools` go out, so the request stays
+/// small no matter how many servers are connected. `load_tools` is itself a
+/// built-in, so the model can always pull more. `mcp_filter` restricts
+/// eligibility (e.g. subagents never see mutating tools).
 fn sent_tools(
     builtin: &[Value],
     all_tools: &[(String, Vec<Value>)],
     loaded: futures::lock::MutexGuard<'_, std::collections::HashSet<String>>,
     mcp_filter: impl Fn(&Value) -> bool,
 ) -> Vec<Value> {
-    let mcp: Vec<Value> = all_tools
-        .iter()
-        .flat_map(|(server, list)| {
-            list.iter()
-                .filter(|t| mcp_filter(t))
-                .map(|t| mcp_tool_to_openai(server, t))
-        })
-        .collect();
     let mut tools = builtin.to_vec();
-    if builtin.len() + mcp.len() <= MAX_SENT_TOOLS {
-        tools.extend(mcp);
-    } else {
-        tools.extend(mcp.into_iter().filter(|t| loaded.contains(tool_name(t))));
-    }
+    tools.extend(
+        all_tools
+            .iter()
+            .flat_map(|(server, list)| {
+                list.iter()
+                    .filter(|t| mcp_filter(t))
+                    .map(|t| mcp_tool_to_openai(server, t))
+            })
+            .filter(|t| loaded.contains(tool_name(t))),
+    );
     // Backstop: even a huge loaded set must stay under the provider cap.
     if tools.len() > MAX_SENT_TOOLS {
         tools.truncate(MAX_SENT_TOOLS);
@@ -2795,8 +2793,8 @@ async fn drive(o: RunOpts, tx: mpsc::UnboundedSender<Frame>) {
 
     let mut clients = conn.clients;
     let public_states = conn.public_states;
-    // Built-ins only — the per-iteration `sent_tools` adds the MCP schemas
-    // (all of them when under the cap, or just the load_tools-pulled ones).
+    // Built-ins only — the per-iteration `sent_tools` adds whatever MCP schemas
+    // the model has pulled via `load_tools`.
     let base_tools: Vec<Value> = builtin_tools()
         .into_iter()
         .filter(|t| tools_registry::is_enabled(tool_name(t), &disabled))
@@ -3113,10 +3111,16 @@ mod tests {
         assert!(!out.iter().any(|t| tool_name(t) == "big__tool_0"));
         assert!(out.len() <= MAX_SENT_TOOLS);
 
-        // Under the cap: everything goes.
+        // MCP tools are never sent unless pulled via load_tools — even a single
+        // connected tool waits for the model to discover it.
         let small = vec![json!({"name": "only", "description": "d", "inputSchema": {"type": "object"}})];
         let all_small = vec![("s".to_string(), small)];
         let loaded = futures::lock::Mutex::new(std::collections::HashSet::new());
+        let out = sent_tools(&builtin, &all_small, loaded.try_lock().unwrap(), |_| true);
+        assert_eq!(out.len(), builtin.len());
+        let mut set = std::collections::HashSet::new();
+        set.insert("s__only".to_string());
+        let loaded = futures::lock::Mutex::new(set);
         let out = sent_tools(&builtin, &all_small, loaded.try_lock().unwrap(), |_| true);
         assert_eq!(out.len(), builtin.len() + 1);
         assert!(out.iter().any(|t| tool_name(t) == "s__only"));

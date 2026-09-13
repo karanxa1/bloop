@@ -150,3 +150,16 @@ export interface ServerTool {
 
 export const isOauthResult = (r: AddServerResult): r is AddServerOauth =>
   "oauth_required" in r && r.oauth_required === true;
+
+// ── url probe (auth auto-detection) ──────────────────────────────
+export type DetectedAuth = "none" | "oauth" | "credentials";
+
+export interface ProbeResult {
+  state: "ok" | "auth_required" | "error";
+  detected_auth?: DetectedAuth;
+  tool_count?: number;
+  tools?: ToolSummary[];
+  issuer?: string;
+  registration?: boolean;
+  hint?: string;
+}

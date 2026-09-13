@@ -548,6 +548,59 @@ pub async fn add(mut req: Request, env: &Env, user_id: &str) -> Result<Response>
     }
 }
 
+/// POST /api/servers/probe {url} — unauthenticated detection pass used by the
+/// "custom mcp" form: reports whether the URL is an open MCP server, needs
+/// OAuth (full discovery succeeded), or needs static credentials.
+pub async fn probe_url(mut req: Request) -> Result<Response> {
+    let body: Value = req.json().await.unwrap_or_else(|_| json!({}));
+    let url = body
+        .get("url")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .trim()
+        .to_string();
+    if url.is_empty() {
+        return json_err("url required", 400);
+    }
+    if let Err(e) = netguard::check_outbound_url(&url) {
+        return json_err(&format!("invalid url: {}", e), 400);
+    }
+    let cfg = McpServerCfg {
+        name: "probe".to_string(),
+        url: url.clone(),
+        token: String::new(),
+        headers: Vec::new(),
+        transport: Transport::Auto,
+    };
+    match mcp::probe_cfg(&cfg, PROBE_ADD_MS).await {
+        Ok(tools) => Response::from_json(&json!({
+            "state": "ok",
+            "detected_auth": "none",
+            "tool_count": tools.len(),
+            "tools": brief_tools(&tools),
+        })),
+        Err(e) if e.kind() == McpErrorKind::Auth => match oauth::discover(&url).await {
+            Ok(d) => Response::from_json(&json!({
+                "state": "auth_required",
+                "detected_auth": "oauth",
+                "issuer": d.issuer,
+                "registration": d.registration_endpoint.is_some() || d.cimd_supported,
+            })),
+            Err(_) => Response::from_json(&json!({
+                "state": "auth_required",
+                "detected_auth": "credentials",
+                "hint": "the server rejected anonymous access — add a bearer token or headers",
+            })),
+        },
+        Err(e) => Response::from_json(&json!({
+            "state": "error",
+            "error": format!("could not connect: {}", e),
+            "error_kind": e.kind().as_str(),
+        }))
+        .map(|r| r.with_status(400)),
+    }
+}
+
 /// `/api/servers/:id[/action]` dispatcher.
 pub async fn route(req: Request, env: &Env, user_id: &str, rest: &str, method: Method) -> Result<Response> {
     let rest = rest.trim_matches('/');

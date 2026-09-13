@@ -194,6 +194,7 @@ async fn route_authed(
         (&Method::Get, "/api/servers") => marketplace::list(&env, user_id).await,
         (&Method::Post, "/api/servers") => marketplace::add(req, &env, user_id).await,
         (&Method::Get, "/api/servers/catalog") => marketplace::catalog(&env, user_id).await,
+        (&Method::Post, "/api/servers/probe") => marketplace::probe_url(req).await,
         (&Method::Get, "/api/oauth/callback") => oauth::callback(&req, &env, user_id).await,
         (&Method::Get, "/api/ledger") => ledger_handler(user_id).await,
         (&Method::Post, "/api/mcp/call") => agent::mcp_call_route(req, &env, user_id).await,

@@ -5,6 +5,7 @@ import type {
   CatalogServer,
   InstalledServer,
   PatchServerBody,
+  ProbeResult,
   ServerTool,
   TestResult
 } from "../types/marketplace";
@@ -58,6 +59,10 @@ export const removeServer = (id: string) =>
 
 export const testServer = (id: string) =>
   mreq<TestResult>(`/api/servers/${encodeURIComponent(id)}/test`, { method: "POST" });
+
+/** unauthenticated detection pass — what auth does this server url need? */
+export const probeServer = (url: string) =>
+  mreq<ProbeResult>("/api/servers/probe", { method: "POST", json: { url } });
 
 export const listServerTools = (id: string) =>
   mreq<ServerTool[]>(`/api/servers/${encodeURIComponent(id)}/tools`);

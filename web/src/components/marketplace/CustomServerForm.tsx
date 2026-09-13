@@ -1,14 +1,15 @@
-import { useId, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import type { FormEvent } from "react";
 import {
   addServer,
   errMsg,
   patchServer,
+  probeServer,
   removeServer,
   startOauth,
   testServer
 } from "../../api/marketplace";
-import { AlertIcon, PlusIcon, XIcon } from "../../icons";
+import { AlertIcon, CheckIcon, PlusIcon, XIcon } from "../../icons";
 import { cx } from "../../lib";
 import { isOauthResult } from "../../types/marketplace";
 import type {
@@ -16,6 +17,7 @@ import type {
   AuthType,
   InstalledServer,
   PatchServerBody,
+  ProbeResult,
   ServerAuth,
   TestResult,
   Transport
@@ -198,8 +200,47 @@ export function CustomServerForm({
   const [testedSig, setTestedSig] = useState("");
   const [oauthUrl, setOauthUrl] = useState<string | null>(null);
   const [formError, setFormError] = useState("");
+  const [probe, setProbe] = useState<ProbeResult | null>(null);
+  const [probing, setProbing] = useState(false);
+  const authTouched = useRef(false);
+  const probeSeq = useRef(0);
   const draft = useRef<{ id: string; sig: string; oauth?: string } | null>(null);
   const saved = useRef(false);
+
+  // auto-detect what auth the server needs once the url looks valid
+  useEffect(() => {
+    setProbe(null);
+    if (editing || urlProblem(url)) {
+      setProbing(false);
+      return;
+    }
+    const seq = ++probeSeq.current;
+    setProbing(true);
+    const t = setTimeout(() => {
+      probeServer(url.trim())
+        .then((r) => {
+          if (probeSeq.current === seq) setProbe(r);
+        })
+        .catch((e) => {
+          if (probeSeq.current === seq)
+            setProbe({ state: "error", hint: errMsg(e, "couldn't reach that url") });
+        })
+        .finally(() => {
+          if (probeSeq.current === seq) setProbing(false);
+        });
+    }, 700);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [url]);
+
+  // preselect the detected auth method unless the user already chose one
+  useEffect(() => {
+    if (!probe || authTouched.current || editing) return;
+    if (probe.detected_auth === "oauth") setAuthType("oauth");
+    else if (probe.detected_auth === "none") setAuthType("none");
+    else if (probe.detected_auth === "credentials") setAuthType((t) => (t === "none" || t === "oauth" ? "bearer" : t));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [probe]);
 
   const connSig = JSON.stringify([url.trim(), transport, authType]);
   const fullSig = JSON.stringify([name.trim(), connSig, token, rows.map((r) => [r.key, r.value])]);
@@ -381,6 +422,32 @@ export function CustomServerForm({
             </p>
           )}
           {errText("url")}
+          {!editing && !show("url") && (probing || probe) && (
+            <p aria-live="polite" className="mt-1.5 flex items-center gap-1.5 text-[11px] font-medium text-neutral-600">
+              {probing ? (
+                <>
+                  <Spinner className="h-3 w-3" /> checking what sign-in this server needs…
+                </>
+              ) : probe?.detected_auth === "oauth" ? (
+                <>
+                  <CheckIcon className="h-3 w-3 text-bloop-deep" /> oauth sign-in detected — bloop will walk you through it
+                </>
+              ) : probe?.detected_auth === "none" ? (
+                <>
+                  <CheckIcon className="h-3 w-3 text-bloop-deep" /> open server — {probe.tool_count ?? 0}{" "}
+                  {(probe.tool_count ?? 0) === 1 ? "tool" : "tools"} found, no sign-in needed
+                </>
+              ) : probe?.detected_auth === "credentials" ? (
+                <>
+                  <AlertIcon className="h-3 w-3 text-amber-600" /> {probe.hint ?? "this server needs credentials"}
+                </>
+              ) : probe?.state === "error" ? (
+                <>
+                  <AlertIcon className="h-3 w-3 text-red-600" /> {probe.hint ?? "couldn't reach that url"}
+                </>
+              ) : null}
+            </p>
+          )}
         </div>
 
         <div>
@@ -407,6 +474,14 @@ export function CustomServerForm({
           <div className="flex flex-wrap gap-1.5">
             {AUTH_OPTS.map((o) => {
               const on = authType === o.value;
+              const detected =
+                probe?.detected_auth === "oauth"
+                  ? o.value === "oauth"
+                  : probe?.detected_auth === "none"
+                    ? o.value === "none"
+                    : probe?.detected_auth === "credentials"
+                      ? o.value === "bearer" || o.value === "headers"
+                      : false;
               return (
                 <label
                   key={o.value}
@@ -420,10 +495,18 @@ export function CustomServerForm({
                     name={field("auth")}
                     value={o.value}
                     checked={on}
-                    onChange={() => setAuthType(o.value)}
+                    onChange={() => {
+                      authTouched.current = true;
+                      setAuthType(o.value);
+                    }}
                     className="sr-only"
                   />
                   {o.label}
+                  {detected && (
+                    <span className={cx("ml-1.5 rounded-full px-1.5 py-px text-[9px] font-bold uppercase tracking-wide", on ? "bg-bloop text-neutral-900" : "bg-bloop/20 text-bloop-ink")}>
+                      detected
+                    </span>
+                  )}
                 </label>
               );
             })}

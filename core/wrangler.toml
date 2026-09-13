@@ -8,6 +8,19 @@ build.command = "cargo install -q worker-build && worker-build --release"
 directory = "../web/dist"
 binding = "ASSETS"
 
+[[d1_databases]]
+binding = "DB"
+database_name = "bloop-db"
+database_id = "4553b829-7a3d-436d-be23-c71bcf0d32ae"
+
+[[kv_namespaces]]
+binding = "SESSIONS"
+id = "2b0ca58636b24505ba5d678e512a801b"
+
+[[r2_buckets]]
+binding = "FILES"
+bucket_name = "bloop-files"
+
 [vars]
 AZURE_OPENAI_ENDPOINT = "https://callmissed-resource.cognitiveservices.azure.com"
 AZURE_OPENAI_API_VERSION = "2025-04-01-preview"

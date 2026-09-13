@@ -1,6 +1,23 @@
-# bloop — tiny blob. big brain.
+<p align="center">
+  <img src="landing/assets/hero.webp" alt="bloop" width="640" />
+</p>
 
-> **An AI agent that doesn't just say it did something — it proves it.**
+<h1 align="center">bloop — tiny blob. big brain.</h1>
+
+<p align="center"><b>An AI agent that doesn't just say it did something — it proves it.</b></p>
+
+<p align="center">
+  <a href="https://bloop.rough-cell-383c.workers.dev"><b>live app</b></a> ·
+  <a href="https://www.loom.com/share/fdcc943af2e24d599e647a1b5735f784"><b>demo video</b></a> ·
+  <a href="evals"><b>eval reports</b></a> ·
+  <a href="docs/USE-BLOOP.md"><b>feature tour</b></a>
+</p>
+
+<p align="center">
+  <img src="https://github.com/karanxa1/bloop/actions/workflows/deploy.yml/badge.svg" alt="ci" />
+  <img src="https://img.shields.io/badge/evals-6%2F6%20pass-8DC63F" alt="evals 6/6" />
+  <img src="https://img.shields.io/badge/apps-15%2B%20MCP%20servers-8DC63F" alt="15+ apps" />
+</p>
 
 bloop is a general-purpose agent that plans, takes real actions across your apps,
 **verifies every mutation with an independent read-back**, and records a
@@ -16,6 +33,23 @@ bloop connects to **any MCP server ever published** — and ships with 15+ wired
 | **Demo video** | [watch on Loom](https://www.loom.com/share/fdcc943af2e24d599e647a1b5735f784) (~2 min) |
 | **Evals** | **6/6 pass** against production — verified against real GitHub state (`evals/report-*.md`) |
 | **Repo** | https://github.com/karanxa1/bloop |
+
+## Try it in 30 seconds
+
+1. Open **https://bloop.rough-cell-383c.workers.dev/app** and sign up — no invite needed.
+2. Paste: *"create a github issue in karanxa1/bloop-evals titled 'hello from a judge', then read it back and prove it exists."*
+3. Watch the **proof** panel on the right — the issue gets written, read back from GitHub, and attested into the hash chain. Click the link; the issue is really there.
+
+Then try the [full 20-step self-test prompt](docs/USE-BLOOP.md#the-full-system-test-prompt) to exercise every subsystem in one run.
+
+## The hackathon brief, answered
+
+| Brief | How bloop answers |
+|---|---|
+| **One useful, multi-step agent** | Plans with `update_plan`, executes across iterations, narrates each step, finishes with a verified report — for everyday work (`default`), hard reasoning (`think`), and long-horizon research (`deep`). |
+| **≥ 3 external apps** | 15+ connected out of the box (GitHub, Linear, Notion, Sentry, Stripe, Zapier, DeepWiki, Context7, Cloudflare, Exa…), plus **paste any MCP URL** — bloop probes it, detects OAuth/token/none, and connects. |
+| **Multi-app orchestration** | `load_tools` searches every server's tools and pulls only what's needed; parallel calls fan out across apps; `delegate` runs parallel subagents that each reach the apps. |
+| **Beyond a chatbot** | Sandboxed code, a persistent workspace, image generation, a shareable remote browser, voice, memory, skills — and a tamper-evident proof trace for every action. |
 
 ---
 

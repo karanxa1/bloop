@@ -467,7 +467,7 @@ async fn regen_summary(
             transcript
         )
     })];
-    match azure::chat_once(cfg, "gpt-5.5", &msgs, &[]).await {
+    match azure::chat_once(cfg, &cfg.model_fallback, &msgs, &[]).await {
         Ok(v) => {
             let summary = v
                 .get("choices")
@@ -551,12 +551,37 @@ fn search_tools(all: &[(String, Vec<Value>)], query: &str) -> Vec<Value> {
 }
 
 async fn run_code(ctx: &Ctx, code: &str, language: &str) -> (bool, String) {
+    let body = json!({"code": code, "language": language});
+
+    // Prefer the SANDBOX service binding (worker→worker, no public hop —
+    // workers.dev hosts can't fetch each other, error 1042).
+    if let Ok(f) = ctx.env.service("SANDBOX") {
+        let headers = Headers::new();
+        let _ = headers.set("content-type", "application/json");
+        if !ctx.cfg.sandbox_token.is_empty() {
+            let _ = headers.set("authorization", &format!("Bearer {}", ctx.cfg.sandbox_token));
+        }
+        let mut init = RequestInit::new();
+        init.with_method(Method::Post)
+            .with_headers(headers)
+            .with_body(Some(body.to_string().into()));
+        if let Ok(req) = Request::new_with_init("https://sandbox.internal/run", &init) {
+            match f.fetch_request(req).await {
+                Ok(mut resp) => match resp.json::<Value>().await {
+                    Ok(v) => return sandbox_out(&v),
+                    Err(e) => return (false, format!("sandbox bad response: {}", e)),
+                },
+                Err(e) => return (false, format!("sandbox fetch failed: {}", e)),
+            }
+        }
+    }
+
+    // Fallback: plain HTTP (local dev / external sandbox).
     let base = match &ctx.cfg.sandbox_url {
         Some(u) if !u.is_empty() => u.clone(),
         _ => return (false, "sandbox not configured".to_string()),
     };
     let url = format!("{}/run", base);
-    let body = json!({"code": code, "language": language});
     let auth = format!("Bearer {}", ctx.cfg.sandbox_token);
     let headers: Vec<(&str, &str)> = if ctx.cfg.sandbox_token.is_empty() {
         vec![]
@@ -564,22 +589,24 @@ async fn run_code(ctx: &Ctx, code: &str, language: &str) -> (bool, String) {
         vec![("authorization", auth.as_str())]
     };
     match azure::post_json(&url, &headers, &body).await {
-        Ok(v) => {
-            let stdout = v.get("stdout").and_then(|s| s.as_str()).unwrap_or("");
-            let stderr = v.get("stderr").and_then(|s| s.as_str()).unwrap_or("");
-            let exit = v.get("exit_code").and_then(|e| e.as_i64()).unwrap_or(-1);
-            let mut out = stdout.to_string();
-            if !stderr.is_empty() {
-                if !out.is_empty() {
-                    out.push('\n');
-                }
-                out.push_str("stderr: ");
-                out.push_str(stderr);
-            }
-            (exit == 0, truncate(&out, 4000))
-        }
+        Ok(v) => sandbox_out(&v),
         Err(e) => (false, format!("{}", e)),
     }
+}
+
+fn sandbox_out(v: &Value) -> (bool, String) {
+    let stdout = v.get("stdout").and_then(|s| s.as_str()).unwrap_or("");
+    let stderr = v.get("stderr").and_then(|s| s.as_str()).unwrap_or("");
+    let exit = v.get("exit_code").and_then(|e| e.as_i64()).unwrap_or(-1);
+    let mut out = stdout.to_string();
+    if !stderr.is_empty() {
+        if !out.is_empty() {
+            out.push('\n');
+        }
+        out.push_str("stderr: ");
+        out.push_str(stderr);
+    }
+    (exit == 0, truncate(&out, 4000))
 }
 
 /// Execute one tool call (MCP or built-in).

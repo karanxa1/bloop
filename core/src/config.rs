@@ -24,7 +24,6 @@ pub const MODELS: &[(&str, &str)] = &[
     ("gpt-5.6-terra", "GPT-5.6 Terra"),
     ("gpt-5.6-sol", "GPT-5.6 Sol"),
     ("gpt-5.6-luna", "GPT-5.6 Luna"),
-    ("gpt-5.5", "GPT-5.5"),
 ];
 
 pub const DEFAULT_MODEL: &str = "gpt-5.6-terra";
@@ -120,7 +119,7 @@ impl Config {
                 .unwrap_or_else(|| "2025-04-01-preview".into()),
             model: env_str(env, "AGENT_MODEL").unwrap_or_else(|| DEFAULT_MODEL.into()),
             model_fallback: env_str(env, "AGENT_MODEL_FALLBACK")
-                .unwrap_or_else(|| "gpt-5.5".into()),
+                .unwrap_or_else(|| "gpt-5.6-sol".into()),
             servers,
             sandbox_url: env_str(env, "SANDBOX_URL").map(|u| u.trim_end_matches('/').to_string()),
             sandbox_token: env_str(env, "SANDBOX_TOKEN").unwrap_or_default(),

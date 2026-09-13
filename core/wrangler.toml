@@ -22,9 +22,19 @@ id = "2b0ca58636b24505ba5d678e512a801b"
 binding = "FILES"
 bucket_name = "bloop-files"
 
+# worker→worker: run_code tool (avoids the workers.dev subrequest ban)
+[[services]]
+binding = "SANDBOX"
+service = "bloop-sandbox"
+
+# drop the TS starter's ChatAgent class (rust backend uses D1, not DOs)
+[[migrations]]
+tag = "v2"
+deleted_classes = ["ChatAgent"]
+
 [vars]
 AZURE_OPENAI_ENDPOINT = "https://callmissed-resource.cognitiveservices.azure.com"
 AZURE_OPENAI_API_VERSION = "2025-04-01-preview"
 AGENT_MODEL = "gpt-5.6-terra"
-AGENT_MODEL_FALLBACK = "gpt-5.5"
+AGENT_MODEL_FALLBACK = "gpt-5.6-sol"
 SANDBOX_URL = "https://bloop-sandbox.rough-cell-383c.workers.dev"

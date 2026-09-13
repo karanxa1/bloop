@@ -6,6 +6,20 @@ compatibility_flags = ["nodejs_compat"]
 [observability]
 enabled = true
 
+[vars]
+CF_ACCOUNT_ID = "337c662fed500c2dff530141baaf75c9"
+# CF_BROWSER_TOKEN is a secret (wrangler secret put) — enables /browser/handoff.
+
+[browser]
+binding = "BROWSER"
+
+# Readability / Turndown browser builds are bundled as source text and
+# evaluated inside the rendered page by /browser/fetch.
+[[rules]]
+type = "Text"
+globs = ["**/Readability.js", "**/dist/turndown.js", "**/dist/turndown-plugin-gfm.js"]
+fallthrough = true
+
 [[containers]]
 class_name = "Sandbox"
 image = "./Dockerfile"

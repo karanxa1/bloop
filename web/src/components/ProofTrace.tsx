@@ -25,7 +25,10 @@ function statusDot(status: PlanStep["status"]) {
 export function ProofTrace({ plan, trace, verifyCount, onClose }: ProofTraceProps) {
   const toolCalls = trace.filter((t): t is Extract<TraceItem, { kind: "tool" }> => t.kind === "tool");
   const mutating = toolCalls.filter(
-    (t) => t.call.status !== "running" && MUTATING.test(t.call.name)
+    (t) =>
+      t.call.status !== "running" &&
+      t.call.app !== "bloop" &&
+      MUTATING.test(t.call.name)
   ).length;
   const unverified = Math.max(0, mutating - verifyCount);
 
@@ -121,7 +124,7 @@ export function ProofTrace({ plan, trace, verifyCount, onClose }: ProofTraceProp
 }
 
 function ToolTraceRow({ call }: { call: ToolCall }) {
-  const isMutating = MUTATING.test(call.name);
+  const isMutating = call.app !== "bloop" && MUTATING.test(call.name);
   return (
     <li className="border border-neutral-200 border-l-2 border-l-bloop bg-white px-2.5 py-1.5">
       <div className="flex items-center gap-1.5">

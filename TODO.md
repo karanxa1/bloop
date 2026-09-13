@@ -19,7 +19,7 @@ Living tracker for the v3 work specced in HANDOFF.md. `[x]` done · `[~]` in pro
 - [ ] **blocked on user:** add repo secret `CLOUDFLARE_API_TOKEN` (wrangler is oauth locally — ci needs a token)
 - [ ] **optional, user:** `CF_BROWSER_TOKEN` secret on bloop-sandbox for live-view handoff
 
-- [~] **build subagents + code workspace** — r2 `ws/<conv>/…` is source of truth · [ ] sandbox `POST /workspace/exec` hydrate→run→sync (sandbox agent) · [ ] core `workspace_{write,read,list,delete,exec}` built-ins, `workspace` sse, `delegate(kind: research|build)`, `/api/workspace/:conv/{files,file,exec}` (core agent) · [ ] web: lazy codemirror 6 editor panel (file tree, tabs, save, run, live refresh on `workspace` events) + richer subagent ui (launch after web agent lands)
+- [~] **build subagents + code workspace** — r2 `ws/<conv>/…` is source of truth · [x] sandbox `POST /workspace/exec` hydrate→run→sync — deployed 6196d465, container → standard-1 · [ ] core `workspace_{write,read,list,delete,exec}` built-ins, `workspace` sse, `delegate(kind: research|build)`, `/api/workspace/:conv/{files,file,exec}` (core agent) · [ ] web: lazy codemirror 6 editor panel (file tree, tabs, save, run, live refresh on `workspace` events) + richer subagent ui (launch after web agent lands)
 - [~] remove invite code — backend check deleted in auth.rs (lead) · signup form field + api (web agent)
 - [~] ui-perfect pass — research best agent app uis → `ui-spec.md` (research agent) · then 3 parallel implementers: (a) chat surface (b) chrome/modals/auth/trace (c) landing + tokens — launch after web agent lands
 

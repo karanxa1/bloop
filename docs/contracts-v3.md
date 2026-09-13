@@ -35,6 +35,11 @@ Persisted parts add `{kind:"thinking", text}` and `{kind:"mcp_app", id, server, 
 - `PUT /api/workspace/:conv/file {path, content}` · `DELETE /api/workspace/:conv/file?path=`
 - `POST /api/workspace/:conv/exec {command}` → `{stdout, stderr, exit_code, ms, changed, deleted, skipped?, sync_error?}`
 
+### attachments (files · folders · images sent in chat)
+- `POST /api/workspace/:conv/upload` — `multipart/form-data`, one or more `file` fields; each field's filename is the relative path (folders via `webkitdirectory` keep `dir/sub/file`). Stored at R2 `ws/<conv>/uploads/<path>` so sandbox exec hydrates them automatically. Limits: 25 MB/file, 200 files, 100 MB/request → 413. Returns `[{path: "uploads/…", bytes, mime}]`.
+- `GET /api/workspace/:conv/raw?path=` — raw bytes for previews (images inline with `nosniff`; everything else `Content-Disposition: attachment`).
+- `POST /api/chat` body gains `attachments?: [{path, mime, bytes}]` (paths returned by upload). Backend: persists user part `{kind:"attachment", path, mime, bytes}`; images (png/jpeg/webp/gif ≤ 5 MB, max 8) go to the model as vision input; all attachments are listed in the user turn ("attached in workspace: uploads/…") so the agent can `workspace_read` / `workspace_exec` them.
+
 ## MCP Apps host (per MCP Apps spec — verify at modelcontextprotocol.io)
 Render `url` in `<iframe sandbox="allow-scripts allow-forms">` (never `allow-same-origin`). postMessage JSON-RPC bridge: `ui/initialize` → host context (theme, display mode, tool input/result); `tools/call` → `POST /api/mcp/call` (same server only); `ui/message` → send as a chat message; `ui/open-link` → `window.open(url, "_blank", "noopener")` (http/https only); size-change notifications → resize iframe. Validate `event.source === iframe.contentWindow`.
 

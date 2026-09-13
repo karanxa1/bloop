@@ -3,429 +3,545 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>bloop — tiny blob. big brain.</title>
-  <meta name="description" content="bloop is a general ai agent that acts across your apps. tiny blob. big brain." />
+  <title>bloop: the ai agent that acts across your apps and proves every step</title>
+  <meta name="description" content="bloop is a general ai agent that plans, acts across github, deepwiki, context7, higgsfield and any mcp server in parallel, verifies every write by read-back and signs each run into a sha-256 hash-chained ledger. 6/6 evals against production." />
+  <meta name="robots" content="index,follow" />
+  <meta name="theme-color" content="#8DC63F" />
+  <link rel="canonical" href="https://bloop.rough-cell-383c.workers.dev/" />
+  <link rel="alternate" type="text/plain" href="/llms.txt" title="llms.txt" />
+  <link rel="icon" type="image/png" href="/favicon.png" />
+  <link rel="apple-touch-icon" href="/favicon.png" />
 
-  <!-- tailwind cdn + theme -->
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script>
-    tailwind.config = {
-      theme: {
-        extend: {
-          colors: { bloop: '#8DC63F', olive: '#5C8A2C', ink: '#171717' },
-          fontFamily: {
-            display: ['"Baloo 2"', 'ui-rounded', 'system-ui', 'sans-serif'],
-            body: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'],
-          },
-          keyframes: {
-            'hero-pop': {
-              '0%': { opacity: '0', transform: 'scale(.96)', filter: 'blur(8px)' },
-              '100%': { opacity: '1', transform: 'scale(1)', filter: 'blur(0)' },
-            },
-            reveal: {
-              '0%': { opacity: '0', transform: 'translateY(20px)' },
-              '100%': { opacity: '1', transform: 'translateY(0)' },
-            },
-            'panel-zoom': {
-              '0%': { transform: 'scale(1)' },
-              '100%': { transform: 'scale(1.06)' },
-            },
-          },
-          animation: {
-            'hero-pop': 'hero-pop .7s ease-out both',
-            reveal: 'reveal .65s ease-out both',
-            'panel-zoom': 'panel-zoom linear both',
-          },
-        },
-      },
-    };
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="bloop" />
+  <meta property="og:url" content="https://bloop.rough-cell-383c.workers.dev/" />
+  <meta property="og:title" content="bloop: tiny blob. big brain." />
+  <meta property="og:description" content="one ai agent that acts across your apps over mcp, verifies every write by read-back and proves it with a hash-chained ledger." />
+  <meta property="og:image" content="https://bloop.rough-cell-383c.workers.dev/landing/assets/hero.webp" />
+  <meta property="og:image:width" content="1536" />
+  <meta property="og:image:height" content="1024" />
+  <meta name="twitter:card" content="summary_large_image" />
+
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    "name": "bloop",
+    "url": "https://bloop.rough-cell-383c.workers.dev/",
+    "applicationCategory": "BusinessApplication",
+    "operatingSystem": "Web",
+    "description": "A general-purpose AI agent that takes real, multi-step actions across external apps through MCP, verifies every mutation with an independent read-back and records a SHA-256 hash-chained attestation ledger.",
+    "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+    "sameAs": ["https://github.com/karanxa1/bloop"],
+    "featureList": [
+      "plan, act, verify, attest agent loop",
+      "parallel MCP tool calls with timeouts, retries and circuit breakers",
+      "streamed research and build subagents",
+      "sandboxed code workspace with editor and run console",
+      "remote browser with user take-over handoff",
+      "MCP marketplace with custom servers, OAuth 2.1 and MCP Apps UI",
+      "skills marketplace and agent-written skills",
+      "memories, context and lessons files",
+      "default, think and deep modes with cited sources",
+      "hash-chained proof trace",
+      "6/6 evals against production with GitHub ground truth"
+    ]
+  }
   </script>
 
-  <!-- fonts -->
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link
-    href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@700;800&family=Inter:wght@400;500;600&display=swap"
-    rel="stylesheet"
-  />
+  <link rel="preload" as="image" href="/landing/assets/hero.webp" fetchpriority="high" />
+  <link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+
+  <link rel="stylesheet" href="/landing/landing.css" />
+  <script src="/landing/landing.js" defer></script>
 </head>
 
-<body class="bg-[#F2F2F2] font-body lowercase text-ink antialiased">
-  <a
-    href="#features"
-    class="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:bg-white focus:px-4 focus:py-2 focus:text-sm focus:text-ink"
-    >skip to content</a
-  >
+<body class="bg-page font-body lowercase text-ink antialiased">
+  <a href="#main" class="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-[60] focus:bg-white focus:px-4 focus:py-2 focus:text-sm">skip to content</a>
 
-  <!-- ============ 1. hero — full-bleed photo, sticker wordmark, lime cta ============ -->
-  <header id="top" class="relative flex h-screen min-h-[38rem] flex-col overflow-hidden">
-    <img
-      src="/landing/assets/hero.webp"
-      width="1536"
-      height="1024"
-      fetchpriority="high"
-      decoding="async"
-      alt="motion-blurred green tree canopy streaking past a bright blue sky"
-      class="absolute inset-0 h-full w-full object-cover"
-    />
-
-    <nav class="relative z-10 flex items-center justify-between px-6 py-6 sm:px-10" aria-label="primary">
-      <a
-        href="#top"
-        class="flex items-center gap-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-olive"
-      >
-        <img src="/landing/assets/logo-blob.webp" width="1024" height="1024" decoding="async" alt="bloop logo — a small white rounded blob" class="h-9 w-9" />
-        <span class="font-display text-xl font-extrabold text-white [text-shadow:0_1px_10px_rgb(0_0_0/0.4)]">bloop</span>
+  <!-- ============ sticky nav ============ -->
+  <div id="nav-sentinel" class="absolute top-2 h-px w-px" aria-hidden="true"></div>
+  <header id="nav" class="sticky top-0 z-50 border-b border-transparent bg-page/80 backdrop-blur-md transition-colors">
+    <nav class="mx-auto flex h-14 max-w-6xl items-center justify-between px-4 sm:px-6" aria-label="primary">
+      <a href="#top" class="flex items-center gap-2">
+        <span class="grid h-8 w-8 place-items-center rounded-full bg-leaf"><img src="/landing/assets/logo-blob.webp" width="24" height="24" decoding="async" alt="" class="h-6 w-6" /></span>
+        <span class="font-display text-2xl font-extrabold leading-none text-leaf">bloop</span>
       </a>
-      <ul class="hidden items-center gap-8 text-sm font-medium text-white [text-shadow:0_1px_8px_rgb(0_0_0/0.4)] sm:flex">
-        <li>
-          <a href="#features" class="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white">features</a>
-        </li>
-        <li>
-          <a href="#numbers" class="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white">numbers</a>
-        </li>
-        <li>
-          <a href="#access" class="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white">get access</a>
-        </li>
-        <li class="border-l border-white/30 pl-8">
-          <a
-            href="/app"
-            class="text-white/70 transition-colors hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
-            >log in</a
-          >
-        </li>
+      <ul class="hidden items-center gap-6 text-sm font-medium text-neutral-700 md:flex">
+        <li><a href="#how" class="hover:text-leaf">how it works</a></li>
+        <li><a href="#features" class="hover:text-leaf">features</a></li>
+        <li><a href="#apps" class="hover:text-leaf">apps</a></li>
+        <li><a href="#reliability" class="hover:text-leaf">reliability</a></li>
+        <li><a href="https://github.com/karanxa1/bloop" target="_blank" rel="noopener noreferrer" class="hover:text-leaf">github</a></li>
       </ul>
+      <a href="/app" class="inline-flex h-9 items-center rounded-full bg-bloop px-4 font-display text-base font-bold text-moss transition-colors hover:bg-moss hover:text-bloop">open the app</a>
     </nav>
-
-    <div class="relative z-10 flex flex-1 flex-col items-center justify-center px-6 pb-16 text-center">
-      <h1
-        class="font-display text-[26vw] font-extrabold leading-[0.85] text-bloop [-webkit-text-stroke:0.05em_#fff] [paint-order:stroke_fill] motion-safe:animate-hero-pop sm:text-[20vw] lg:text-[15rem]"
-      >
-        bloop
-      </h1>
-      <p class="mt-6 max-w-md text-balance text-base text-white [text-shadow:0_1px_12px_rgb(0_0_0/0.5)] sm:text-lg">
-        one tiny agent that does the doing across all your apps.
-      </p>
-      <a
-        href="/app"
-        class="mt-10 inline-flex items-center rounded-full bg-bloop px-8 py-4 font-display text-lg font-bold text-ink transition-[transform,background-color] duration-200 ease-out hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink focus-visible:ring-offset-2 focus-visible:ring-offset-bloop motion-safe:hover:-translate-y-0.5 motion-reduce:transition-[background-color]"
-        >get bloop</a
-      >
-    </div>
   </header>
 
-  <!-- stick context: tagline stays pinned while the photo panel slides over it -->
-  <div class="relative">
-    <!-- ============ 2. sticky tagline band — solid lime ============ -->
-    <section class="sticky top-0 flex h-[85vh] items-center overflow-hidden bg-bloop" aria-label="tagline">
-      <div aria-hidden="true" class="pointer-events-none absolute -left-40 -top-40 grid h-[36rem] w-[36rem] place-items-center">
-        <div class="absolute h-[36rem] w-[36rem] rounded-full border border-white/20"></div>
-        <div class="absolute h-[26rem] w-[26rem] rounded-full border border-white/20"></div>
-        <div class="absolute h-[16rem] w-[16rem] rounded-full border border-white/20"></div>
-      </div>
-      <div class="px-6 sm:px-10 lg:px-20">
-        <p class="font-display text-[16vw] font-extrabold leading-[0.92] text-ink sm:text-[11vw] lg:text-[9rem]">tiny blob.</p>
-        <p
-          class="font-display text-[16vw] font-extrabold leading-[0.92] text-ink [-webkit-text-stroke:0.045em_#fff] [paint-order:stroke_fill] sm:text-[11vw] lg:text-[9rem]"
-        >
-          big brain.
-        </p>
+  <main id="main">
+    <!-- ============ 1. hero + live demo ============ -->
+    <section id="top" class="on-dark relative overflow-hidden" aria-labelledby="hero-title">
+      <img src="/landing/assets/hero.webp" width="1536" height="1024" fetchpriority="high" decoding="async" alt="" class="absolute inset-0 h-full w-full object-cover" />
+      <div class="absolute inset-0 bg-moss/75 lg:bg-transparent lg:bg-linear-to-r lg:from-moss/90 lg:via-moss/70 lg:to-moss/20" aria-hidden="true"></div>
+
+      <div class="relative mx-auto grid max-w-6xl items-center gap-10 px-4 py-12 sm:px-6 sm:py-16 lg:min-h-[calc(100svh-3.5rem)] lg:grid-cols-[1fr_1.1fr] lg:gap-12">
+        <div>
+          <p class="inline-flex items-center gap-2 rounded-full border border-white/25 bg-moss/60 px-3 py-1 text-xs font-medium text-white">
+            <span class="h-2 w-2 rounded-full bg-bloop" aria-hidden="true"></span> multi-app ai agent · mcp native · open signup
+          </p>
+          <h1 id="hero-title" class="mt-5">
+            <span class="sticker block font-display text-7xl font-extrabold leading-[0.85] text-bloop sm:text-8xl">bloop</span>
+            <span class="mt-4 block font-display text-3xl font-bold leading-tight text-white sm:text-4xl">one agent that acts across your apps, and proves every step.</span>
+          </h1>
+          <p class="mt-5 max-w-xl text-base leading-relaxed text-white/90 sm:text-lg">
+            give bloop a goal in plain words. it plans, calls github, deepwiki, context7, higgsfield or any mcp server in parallel, checks every write with an independent read-back, and signs the run into a sha-256 hash-chained ledger.
+          </p>
+          <div class="mt-8 flex flex-wrap items-center gap-3">
+            <a href="/app" class="inline-flex h-12 items-center rounded-full bg-bloop px-7 font-display text-lg font-bold text-moss transition-[transform,background-color] duration-200 hover:bg-white motion-safe:hover:-translate-y-0.5">open the app</a>
+            <a href="#demo" class="inline-flex h-12 items-center gap-2 rounded-full border border-white/60 px-6 font-display text-lg font-bold text-white transition-colors hover:bg-white hover:text-moss">
+              <svg viewBox="0 0 16 16" class="h-4 w-4" fill="currentColor" aria-hidden="true"><path d="M4 2.5v11l9-5.5z" /></svg> watch demo
+            </a>
+          </div>
+          <p class="mt-6 text-sm text-white/85"><span class="font-semibold text-bloop">6/6 evals</span> against production · checked with external github ground truth</p>
+        </div>
+
+        <!-- live demo strip: default markup is the final frame (no-js / reduced motion) -->
+        <figure id="demo" class="relative border-l-4 border-bloop bg-white text-ink shadow-hard" aria-labelledby="demo-cap">
+          <figcaption id="demo-cap" class="sr-only">replay of a bloop run: plan, three parallel tool calls across github, deepwiki and higgsfield with one retried timeout, read-back verification, a hash-chained attestation and the final answer with sources.</figcaption>
+          <div class="flex items-center justify-between gap-2 border-b border-line px-3 py-2 sm:px-4">
+            <span class="flex items-center gap-2 text-xs font-semibold text-neutral-600"><span class="grid h-5 w-5 place-items-center rounded-full bg-leaf"><img src="/landing/assets/logo-blob.webp" width="14" height="14" alt="" class="h-3.5 w-3.5" /></span> bloop · live run</span>
+            <span class="flex gap-1 text-[11px] font-semibold" aria-label="mode">
+              <span class="rounded-full px-2 py-0.5 text-neutral-500">default</span>
+              <span class="rounded-full px-2 py-0.5 text-neutral-500">think</span>
+              <span class="rounded-full bg-moss px-2 py-0.5 text-bloop">deep</span>
+            </span>
+          </div>
+          <ol class="flex gap-1 overflow-hidden border-b border-line px-3 py-2 text-[11px] font-semibold text-neutral-500 sm:px-4" aria-hidden="true">
+            <li class="stage rounded-full px-2 py-0.5" data-stage="plan" data-s="done">plan</li>
+            <li class="stage rounded-full px-2 py-0.5" data-stage="act" data-s="done">act</li>
+            <li class="stage rounded-full px-2 py-0.5" data-stage="verify" data-s="done">verify</li>
+            <li class="stage rounded-full px-2 py-0.5" data-stage="attest" data-s="done">attest</li>
+          </ol>
+
+          <div class="d-body space-y-2.5 p-3 text-[13px] sm:p-4">
+            <p class="ml-auto w-fit max-w-[92%] rounded-2xl rounded-br-sm bg-page px-3 py-2 text-neutral-800">
+              <span id="d-prompt" class="mono">triage the top open bug in karanxa1/bloop, check how the repo handles it, and make a fix-announcement banner</span>
+            </p>
+
+            <p class="d-item flex items-center gap-2 text-xs" data-k="think"><span class="think font-semibold">thinking</span><span class="text-neutral-500">· 3-step plan, 3 apps</span></p>
+
+            <ol class="d-item grid gap-1 border-l-2 border-bloop pl-3 text-xs text-neutral-700" data-k="plan">
+              <li><span class="mono text-leaf">1</span> read the newest bug issue</li>
+              <li><span class="mono text-leaf">2</span> research the affected module</li>
+              <li><span class="mono text-leaf">3</span> generate the banner, then comment + verify</li>
+            </ol>
+
+            <div class="d-item" data-k="tools">
+              <p class="mb-1 text-[11px] font-semibold text-neutral-500">parallel · 3 calls</p>
+              <ul class="grid gap-1.5">
+                <li class="tool flex items-center gap-2 border border-line border-l-2 border-l-bloop px-2 py-1.5" data-tool="gh" data-st="ok">
+                  <span class="grid h-5 w-5 flex-none place-items-center bg-ink text-[10px] font-bold text-white" aria-hidden="true">gh</span>
+                  <span class="min-w-0 flex-1 truncate"><b class="font-semibold">github</b> · <span class="mono">list_issues</span></span>
+                  <span class="ms mono tabular text-[11px] text-neutral-500" data-final="412">412ms</span>
+                  <span class="st" data-st="ok">✓</span>
+                </li>
+                <li class="tool flex items-center gap-2 border border-line border-l-2 border-l-bloop px-2 py-1.5" data-tool="dw" data-st="ok">
+                  <span class="grid h-5 w-5 flex-none place-items-center bg-[#2f5fd0] text-[10px] font-bold text-white" aria-hidden="true">dw</span>
+                  <span class="min-w-0 flex-1 truncate"><b class="font-semibold">deepwiki</b> · <span class="mono">ask_question</span></span>
+                  <span class="ms mono tabular text-[11px] text-neutral-500" data-final="1284">1.28s</span>
+                  <span class="st" data-st="ok">✓</span>
+                </li>
+                <li class="tool border border-line border-l-2 border-l-bloop px-2 py-1.5" data-tool="hf" data-st="ok">
+                  <div class="flex items-center gap-2">
+                    <span class="grid h-5 w-5 flex-none place-items-center bg-moss text-[10px] font-bold text-bloop" aria-hidden="true">hf</span>
+                    <span class="min-w-0 flex-1 truncate"><b class="font-semibold">higgsfield</b> · <span class="mono">generate_image</span></span>
+                    <span class="ms mono tabular text-[11px] text-neutral-500" data-final="3060">3.06s</span>
+                    <span class="st" data-st="ok">✓</span>
+                  </div>
+                  <p class="hf-note mt-0.5 pl-7 text-[11px] text-warn"><span class="mono">error_kind: timeout</span> · retried 1× · recovered</p>
+                </li>
+              </ul>
+            </div>
+
+            <div class="d-item flex flex-wrap items-center gap-2 border border-line border-l-2 border-l-leaf bg-[#EEF6E3] px-2 py-1.5 text-xs" data-k="verify">
+              <span class="st" data-st="ok" id="d-verify-st">✓</span>
+              <span class="min-w-0 flex-1 basis-52">verify · read-back <span class="mono">get_issue_comments #12</span> matches</span>
+              <span class="mono rounded-full bg-white px-2 py-0.5 text-[11px] text-leaf ring-1 ring-leaf/30">#9f3a…c21e ← 7b2d…04aa</span>
+            </div>
+
+            <div class="d-item text-xs" data-k="answer">
+              <p class="text-neutral-800">done. bug #12 is a race in the sse merge; posted a triage comment with the fix plan and the banner, verified by read-back.</p>
+              <p class="mt-2 flex flex-wrap gap-1.5">
+                <span class="rounded-full bg-page px-2 py-0.5 text-[11px] text-neutral-700 ring-1 ring-line">github #12</span>
+                <span class="rounded-full bg-page px-2 py-0.5 text-[11px] text-neutral-700 ring-1 ring-line">deepwiki · core/agent</span>
+                <span class="rounded-full bg-moss px-2 py-0.5 text-[11px] font-semibold text-bloop">attested · 3 entries · chain ok</span>
+              </p>
+            </div>
+          </div>
+        </figure>
       </div>
     </section>
 
-    <!-- ============ photo panel — scrolls over the sticky band ============ -->
-    <section class="relative h-[80vh] overflow-hidden" aria-label="underwater light">
-      <img
-        src="/landing/assets/underwater.webp"
-        width="1536"
-        height="1024"
-        loading="lazy"
-        decoding="async"
-        alt="sunlight rays bending through green-tinted water, smeared with motion blur"
-        class="h-full w-full scale-[1.03] object-cover motion-safe:animate-panel-zoom motion-safe:[animation-timeline:view()]"
-      />
+    <!-- ============ 2. connected apps strip ============ -->
+    <section class="border-b border-line bg-white" aria-label="connected apps">
+      <div class="mx-auto flex max-w-6xl flex-wrap items-center gap-x-6 gap-y-3 px-4 py-5 text-sm sm:px-6">
+        <p class="text-xs font-semibold tracking-[0.15em] text-neutral-600">acts across</p>
+        <ul class="flex flex-wrap gap-2 text-neutral-500">
+          <li class="rounded-full border border-line px-3 py-1 grayscale transition hover:text-ink hover:grayscale-0"><span class="mr-1 inline-block h-2 w-2 rounded-full bg-ink" aria-hidden="true"></span>github</li>
+          <li class="rounded-full border border-line px-3 py-1 transition hover:text-ink"><span class="mr-1 inline-block h-2 w-2 rounded-full bg-[#2f5fd0]" aria-hidden="true"></span>deepwiki</li>
+          <li class="rounded-full border border-line px-3 py-1 transition hover:text-ink"><span class="mr-1 inline-block h-2 w-2 rounded-full bg-[#10b981]" aria-hidden="true"></span>context7</li>
+          <li class="rounded-full border border-line px-3 py-1 transition hover:text-ink"><span class="mr-1 inline-block h-2 w-2 rounded-full bg-[#f38020]" aria-hidden="true"></span>cloudflare docs</li>
+          <li class="rounded-full border border-line px-3 py-1 transition hover:text-ink"><span class="mr-1 inline-block h-2 w-2 rounded-full bg-bloop" aria-hidden="true"></span>higgsfield</li>
+          <li class="rounded-full border border-line px-3 py-1 transition hover:text-ink"><span class="mr-1 inline-block h-2 w-2 rounded-full bg-neutral-400" aria-hidden="true"></span>web browser</li>
+          <li class="rounded-full border border-dashed border-neutral-400 px-3 py-1 text-neutral-600">+ any mcp server</li>
+        </ul>
+      </div>
     </section>
-  </div>
 
-  <!-- ============ 3. features — white cards on lime ============ -->
-  <section id="features" class="relative overflow-hidden bg-bloop px-6 py-24 sm:px-10 lg:px-20 lg:py-32">
-    <div aria-hidden="true" class="pointer-events-none absolute -right-48 -top-48 grid h-[40rem] w-[40rem] place-items-center">
-      <div class="absolute h-[40rem] w-[40rem] rounded-full border border-olive/25"></div>
-      <div class="absolute h-[30rem] w-[30rem] rounded-full border border-olive/25"></div>
-      <div class="absolute h-[20rem] w-[20rem] rounded-full border border-olive/25"></div>
-    </div>
-
-    <div class="relative mx-auto max-w-6xl">
-      <p class="text-xs font-semibold tracking-[0.2em] text-ink/60">what bloop does</p>
-      <h2 class="mt-3 font-display text-4xl font-extrabold text-ink sm:text-5xl">six jobs. one blob.</h2>
-
-      <div class="mt-14 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-        <!-- card: acts, not chats -->
-        <article
-          data-reveal
-          class="bg-white p-8 opacity-0 transition-[transform,background-color] duration-200 ease-out motion-safe:hover:-translate-y-1 motion-reduce:transition-[background-color] hover:bg-[#F2F2F2]"
-        >
-          <svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-12 w-12 text-olive" aria-hidden="true">
-            <path d="M24 5c9 0 17 6 17 15 0 9-4 14-10 17-6 3-13 3-17-1-4-4-6-11-4-17C12 12 16 5 24 5z" />
-            <path d="M18 30 30 18" />
-            <path d="M21 18h9v9" />
-          </svg>
-          <h3 class="mt-6 font-display text-2xl font-bold text-ink">acts, not chats</h3>
-          <p class="mt-3 text-justify text-sm leading-relaxed text-neutral-600">
-            bloop does not just answer. it books, files, sends, and fixes — taking real actions inside your real apps
-            while you get on with your day.
-          </p>
-        </article>
-
-        <!-- card: proves every step -->
-        <article
-          data-reveal
-          class="bg-white p-8 opacity-0 transition-[transform,background-color] duration-200 ease-out [animation-delay:75ms] motion-safe:hover:-translate-y-1 motion-reduce:transition-[background-color] hover:bg-[#F2F2F2]"
-        >
-          <svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-12 w-12 text-olive" aria-hidden="true">
-            <path d="M24 5c9 0 17 6 17 15 0 9-4 14-10 17-6 3-13 3-17-1-4-4-6-11-4-17C12 12 16 5 24 5z" />
-            <path d="M17 24l5 5 10-11" />
-          </svg>
-          <h3 class="mt-6 font-display text-2xl font-bold text-ink">proves every step</h3>
-          <p class="mt-3 text-justify text-sm leading-relaxed text-neutral-600">
-            every action lands in a hash-chained verify trace, and every write is confirmed by read-back before bloop
-            moves on. receipts, not vibes.
-          </p>
-        </article>
-
-        <!-- card: remembers you -->
-        <article
-          data-reveal
-          class="bg-white p-8 opacity-0 transition-[transform,background-color] duration-200 ease-out [animation-delay:150ms] motion-safe:hover:-translate-y-1 motion-reduce:transition-[background-color] hover:bg-[#F2F2F2]"
-        >
-          <svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-12 w-12 text-olive" aria-hidden="true">
-            <path d="M24 5c9 0 17 6 17 15 0 9-4 14-10 17-6 3-13 3-17-1-4-4-6-11-4-17C12 12 16 5 24 5z" />
-            <circle cx="24" cy="23" r="4.5" />
-            <path d="M24 15v2M24 29v2M16 23h2M30 23h2" />
-          </svg>
-          <h3 class="mt-6 font-display text-2xl font-bold text-ink">remembers you</h3>
-          <p class="mt-3 text-justify text-sm leading-relaxed text-neutral-600">
-            preferences, people, past fixes — bloop keeps a persistent memory between sessions, so you never have to
-            explain yourself twice.
-          </p>
-        </article>
-
-        <!-- card: any tool, one blob -->
-        <article
-          data-reveal
-          class="bg-white p-8 opacity-0 transition-[transform,background-color] duration-200 ease-out [animation-delay:225ms] motion-safe:hover:-translate-y-1 motion-reduce:transition-[background-color] hover:bg-[#F2F2F2]"
-        >
-          <svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-12 w-12 text-olive" aria-hidden="true">
-            <path d="M24 5c9 0 17 6 17 15 0 9-4 14-10 17-6 3-13 3-17-1-4-4-6-11-4-17C12 12 16 5 24 5z" />
-            <rect x="14" y="19" width="7" height="7" />
-            <rect x="27" y="14" width="7" height="7" />
-            <rect x="25" y="28" width="7" height="7" />
-            <path d="M21 23h4M28 21l-2 5" />
-          </svg>
-          <h3 class="mt-6 font-display text-2xl font-bold text-ink">any tool, one blob</h3>
-          <p class="mt-3 text-justify text-sm leading-relaxed text-neutral-600">
-            plug in any mcp server from the marketplace — mail, calendar, docs, tickets, the weird internal tool —
-            and the blob just knows what to do with it.
-          </p>
-        </article>
-
-        <!-- card: picks its brain -->
-        <article
-          data-reveal
-          class="bg-white p-8 opacity-0 transition-[transform,background-color] duration-200 ease-out [animation-delay:300ms] motion-safe:hover:-translate-y-1 motion-reduce:transition-[background-color] hover:bg-[#F2F2F2]"
-        >
-          <svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-12 w-12 text-olive" aria-hidden="true">
-            <path d="M24 5c9 0 17 6 17 15 0 9-4 14-10 17-6 3-13 3-17-1-4-4-6-11-4-17C12 12 16 5 24 5z" />
-            <path d="M24 15l2.2 5.3 5.3 2.2-5.3 2.2L24 30l-2.2-5.3-5.3-2.2 5.3-2.2z" />
-          </svg>
-          <h3 class="mt-6 font-display text-2xl font-bold text-ink">picks its brain</h3>
-          <p class="mt-3 text-justify text-sm leading-relaxed text-neutral-600">
-            choose between frontier models and swap whenever you like. same blob, new brain — pick the thinker that
-            fits the job.
-          </p>
-        </article>
-
-        <!-- card: runs code for real -->
-        <article
-          data-reveal
-          class="bg-white p-8 opacity-0 transition-[transform,background-color] duration-200 ease-out [animation-delay:375ms] motion-safe:hover:-translate-y-1 motion-reduce:transition-[background-color] hover:bg-[#F2F2F2]"
-        >
-          <svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-12 w-12 text-olive" aria-hidden="true">
-            <path d="M24 5c9 0 17 6 17 15 0 9-4 14-10 17-6 3-13 3-17-1-4-4-6-11-4-17C12 12 16 5 24 5z" />
-            <path d="M20 19l-5 5 5 5" />
-            <path d="M28 19l5 5-5 5" />
-          </svg>
-          <h3 class="mt-6 font-display text-2xl font-bold text-ink">runs code for real</h3>
-          <p class="mt-3 text-justify text-sm leading-relaxed text-neutral-600">
-            when clicking is not enough, bloop writes and runs code in an isolated cloudflare sandbox. real
-            execution, and nothing touches your machine.
-          </p>
-        </article>
+    <!-- ============ 3. how it works ============ -->
+    <section id="how" class="px-4 py-20 sm:px-6 lg:py-28" aria-labelledby="how-title">
+      <div class="mx-auto max-w-6xl">
+        <p class="text-xs font-semibold tracking-[0.2em] text-leaf">how it works</p>
+        <h2 id="how-title" class="mt-2 font-display text-4xl font-extrabold leading-tight sm:text-5xl">plan → act → verify → attest</h2>
+        <p class="mt-4 max-w-2xl text-neutral-700">bloop never claims what it cannot prove. every run follows the same four steps, and all of it streams live into the chat and the proof trace.</p>
+        <ol class="mt-12 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <li data-reveal class="border-l-4 border-bloop bg-white p-6 shadow-e2">
+            <span class="font-display text-5xl font-extrabold leading-none text-bloop">01</span>
+            <h3 class="mt-3 font-display text-2xl font-bold">plan</h3>
+            <p class="mt-2 text-sm leading-relaxed text-neutral-700">thinks out loud, then writes a step plan that updates as it learns. think mode forces the plan first.</p>
+            <p class="mono mt-4 text-xs text-leaf">think → tool → think</p>
+          </li>
+          <li data-reveal class="border-l-4 border-bloop bg-white p-6 shadow-e2">
+            <span class="font-display text-5xl font-extrabold leading-none text-bloop">02</span>
+            <h3 class="mt-3 font-display text-2xl font-bold">act</h3>
+            <p class="mt-2 text-sm leading-relaxed text-neutral-700">calls mcp tools across apps in parallel, with results kept in order, and hands bigger jobs to streamed subagents.</p>
+            <p class="mono mt-4 text-xs text-leaf">join_all · delegate</p>
+          </li>
+          <li data-reveal class="border-l-4 border-leaf bg-white p-6 shadow-e2">
+            <span class="font-display text-5xl font-extrabold leading-none text-bloop">03</span>
+            <h3 class="mt-3 font-display text-2xl font-bold">verify</h3>
+            <p class="mt-2 text-sm leading-relaxed text-neutral-700">every write is followed by an independent read-back before bloop may say "done". unverified writes get flagged in the ui.</p>
+            <p class="mono mt-4 text-xs text-leaf">write → read-back → match</p>
+          </li>
+          <li data-reveal class="border-l-4 border-moss bg-white p-6 shadow-e2">
+            <span class="font-display text-5xl font-extrabold leading-none text-bloop">04</span>
+            <h3 class="mt-3 font-display text-2xl font-bold">attest</h3>
+            <p class="mt-2 text-sm leading-relaxed text-neutral-700">each verification is appended to a tamper-evident ledger you can audit in the proof trace or at <span class="mono">/api/ledger</span>.</p>
+            <p class="mono mt-4 text-xs text-leaf">sha256(prev_hash ‖ entry)</p>
+          </li>
+        </ol>
       </div>
-    </div>
-  </section>
+    </section>
 
-  <!-- ============ 4. split showcase — photo / solid panel ============ -->
-  <section class="grid lg:grid-cols-2" aria-label="how bloop works">
-    <div class="relative h-[60vh] overflow-hidden lg:h-auto lg:min-h-[42rem]">
-      <img
-        src="/landing/assets/tree.webp"
-        width="1024"
-        height="1536"
-        loading="lazy"
-        decoding="async"
-        alt="a tall tree smeared into vertical motion blur against a blue sky"
-        class="absolute inset-0 h-full w-full scale-[1.03] object-cover motion-safe:animate-panel-zoom motion-safe:[animation-timeline:view()]"
-      />
-    </div>
-    <div class="relative flex items-center overflow-hidden bg-olive px-6 py-20 sm:px-10 lg:px-16">
-      <div aria-hidden="true" class="pointer-events-none absolute -bottom-44 -left-44 grid h-[34rem] w-[34rem] place-items-center">
-        <div class="absolute h-[34rem] w-[34rem] rounded-full border border-white/20"></div>
-        <div class="absolute h-[24rem] w-[24rem] rounded-full border border-white/20"></div>
-        <div class="absolute h-[14rem] w-[14rem] rounded-full border border-white/20"></div>
+    <!-- ============ tagline band ============ -->
+    <section class="bg-bloop px-4 py-14 sm:px-6" aria-label="tagline">
+      <div class="mx-auto flex max-w-6xl flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+        <p class="font-display text-5xl font-extrabold leading-[0.9] text-moss sm:text-7xl">tiny blob.<br /><span class="sticker">big brain.</span></p>
+        <p class="max-w-sm text-base font-medium text-moss">one agent, every app, receipts for everything it touched.</p>
       </div>
-      <div data-reveal class="relative max-w-md opacity-0">
-        <p class="text-xs font-semibold tracking-[0.2em] text-white/70">how it works</p>
-        <h2 class="mt-3 font-display text-4xl font-extrabold text-white sm:text-5xl">
-          you ask once. bloop does the rounds.
-        </h2>
-        <p class="mt-6 text-justify text-base leading-relaxed text-white">
-          drop a goal in plain words. bloop opens the right apps, taps the right buttons, and comes back with the
-          finished thing — plus a tidy log of everything it touched.
-        </p>
-        <a
-          href="/app"
-          class="mt-8 inline-flex items-center rounded-full bg-white px-7 py-3.5 font-display font-bold text-olive transition-[transform,background-color,color] duration-200 ease-out hover:bg-bloop hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-olive motion-safe:hover:-translate-y-0.5 motion-reduce:transition-[background-color,color]"
-          >see it work</a
-        >
-      </div>
-    </div>
-  </section>
+    </section>
 
-  <!-- ============ 5. numbers band — oversized numerals on white ============ -->
-  <section id="numbers" class="bg-white px-6 py-24 sm:px-10 lg:px-20 lg:py-32" aria-label="numbers">
-    <div class="mx-auto grid max-w-6xl gap-12 sm:grid-cols-3 sm:gap-8">
-      <div data-reveal class="opacity-0">
-        <p class="font-display text-7xl font-extrabold leading-none text-olive sm:text-8xl">
-          <span data-count="1000" data-suffix="+">0+</span>
-        </p>
-        <div class="mt-4 h-1 w-10 bg-bloop" aria-hidden="true"></div>
-        <p class="mt-4 text-justify text-sm leading-relaxed text-neutral-600">
-          apps reachable via mcp — mail, docs, tickets, and the weird internal tool, all from the marketplace.
-        </p>
-      </div>
-      <div data-reveal class="opacity-0 [animation-delay:75ms]">
-        <p class="font-display text-7xl font-extrabold leading-none text-olive sm:text-8xl">
-          <span data-count="100" data-suffix="%">0%</span>
-        </p>
-        <div class="mt-4 h-1 w-10 bg-bloop" aria-hidden="true"></div>
-        <p class="mt-4 text-justify text-sm leading-relaxed text-neutral-600">
-          of writes verified by read-back before bloop calls a task done. no silent half-actions, ever.
-        </p>
-      </div>
-      <div data-reveal class="opacity-0 [animation-delay:150ms]">
-        <p class="font-display text-7xl font-extrabold leading-none text-olive sm:text-8xl">
-          <span data-count="1" data-suffix="">0</span>
-        </p>
-        <div class="mt-4 h-1 w-10 bg-bloop" aria-hidden="true"></div>
-        <p class="mt-4 text-justify text-sm leading-relaxed text-neutral-600">
-          tiny blob. it does not multiply, it does not swarm, it does not need to.
-        </p>
-      </div>
-    </div>
-  </section>
+    <!-- ============ 4. features: everything in the app ============ -->
+    <section id="features" class="px-4 py-20 sm:px-6 lg:py-28" aria-labelledby="features-title">
+      <div class="mx-auto max-w-6xl">
+        <p class="text-xs font-semibold tracking-[0.2em] text-leaf">inside the app</p>
+        <h2 id="features-title" class="mt-2 font-display text-4xl font-extrabold leading-tight sm:text-5xl">you can watch it think, act and check itself</h2>
 
-  <!-- ============ 6. cta — full-bleed photo, green overlay, email capture ============ -->
-  <section id="access" class="relative overflow-hidden px-6 py-28 sm:px-10 sm:py-36" aria-label="get access">
-    <img src="/landing/assets/cta-bg.webp" width="1536" height="1024" loading="lazy" decoding="async" alt="" aria-hidden="true" class="absolute inset-0 h-full w-full object-cover" />
-    <div class="absolute inset-0 bg-olive/85" aria-hidden="true"></div>
+        <div class="mt-12 grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          <!-- modes -->
+          <article data-reveal class="border-l-4 border-bloop bg-white p-6 shadow-e2">
+            <h3 class="font-display text-xl font-bold">three modes</h3>
+            <p class="mt-2 text-sm text-neutral-700"><b>default</b> for quick jobs, <b>think</b> forces a plan first, <b>deep</b> runs up to 25 iterations with at least 2 cited sources.</p>
+            <p class="mt-4 inline-flex gap-1 rounded-full bg-page p-1 text-xs font-semibold" aria-hidden="true">
+              <span class="rounded-full px-3 py-1 text-neutral-600">default</span><span class="rounded-full bg-white px-3 py-1 text-leaf shadow-e2">think</span><span class="rounded-full px-3 py-1 text-neutral-600">deep</span>
+            </p>
+          </article>
 
-    <div data-reveal class="relative mx-auto max-w-3xl text-center opacity-0">
-      <h2
-        class="font-display text-5xl font-extrabold leading-[0.95] text-white [-webkit-text-stroke:0.03em_#8DC63F] [paint-order:stroke_fill] sm:text-7xl"
-      >
-        bring a blob to work
-      </h2>
-      <p class="mx-auto mt-6 max-w-md text-balance text-base text-white">
-        one email. early access. no deck, no demo call, no fourteen-page onboarding doc.
-      </p>
-      <form action="#" method="get" class="mx-auto mt-10 flex max-w-md flex-col gap-3 sm:flex-row">
-        <label for="email" class="sr-only">email address</label>
-        <input
-          id="email"
-          name="email"
-          type="email"
-          required
-          placeholder="you@work.com"
-          class="w-full flex-1 bg-white px-5 py-4 text-sm text-ink placeholder:text-neutral-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bloop focus-visible:ring-offset-2 focus-visible:ring-offset-olive"
-        />
-        <button
-          type="submit"
-          class="rounded-full bg-bloop px-8 py-4 font-display font-bold text-ink transition-[transform,background-color] duration-200 ease-out hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-olive motion-safe:hover:-translate-y-0.5 motion-reduce:transition-[background-color]"
-        >
-          join up
-        </button>
-      </form>
-      <p class="mt-6 text-sm text-white/80">
-        already have a blob?
-        <a
-          href="/app"
-          class="underline decoration-white/50 underline-offset-4 transition-colors hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
-          >log in</a
-        >
-      </p>
-    </div>
-  </section>
+          <!-- step timeline -->
+          <article data-reveal class="border-l-4 border-bloop bg-white p-6 shadow-e2">
+            <h3 class="font-display text-xl font-bold">step timeline</h3>
+            <p class="mt-2 text-sm text-neutral-700">each turn is laid out as think → tool → think, so you can see why every call happened.</p>
+            <ol class="mt-4 grid gap-1.5 border-l-2 border-line pl-3 text-xs" aria-hidden="true">
+              <li class="text-neutral-600">think · "need the failing test first"</li>
+              <li class="mono text-ink">tool · github.search_code</li>
+              <li class="text-neutral-600">think · "two call sites, patch both"</li>
+            </ol>
+          </article>
 
-  <!-- ============ 7. footer — deep olive ============ -->
-  <footer class="bg-olive px-6 py-12 sm:px-10">
-    <div class="mx-auto flex max-w-6xl flex-col items-start justify-between gap-8 sm:flex-row sm:items-center">
-      <a
-        href="#top"
-        class="flex items-center gap-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
-      >
-        <img src="/landing/assets/logo-blob.webp" width="1024" height="1024" decoding="async" alt="bloop logo" class="h-8 w-8" />
-        <span class="font-display text-lg font-extrabold text-white">bloop</span>
+          <!-- tool cards + failure protection -->
+          <article data-reveal class="border-l-4 border-warn bg-white p-6 shadow-e2">
+            <h3 class="font-display text-xl font-bold">live tool cards, with failure protection</h3>
+            <p class="mt-2 text-sm text-neutral-700">parallel calls animate in with live timing and ok or error states. errors show their kind and retries; timeouts and circuit breakers keep one bad server from sinking the run.</p>
+            <ul class="mt-4 grid gap-1.5 text-xs" aria-hidden="true">
+              <li class="flex items-center gap-2 border border-line border-l-2 border-l-bloop px-2 py-1"><span class="mono flex-1 truncate">context7.get_docs</span><span class="mono text-neutral-500">640ms</span><span class="font-bold text-leaf">✓</span></li>
+              <li class="flex items-center gap-2 border border-line border-l-2 border-l-err px-2 py-1"><span class="mono flex-1 truncate">github.create_pr</span><span class="mono text-err">error_kind: auth · retries 0</span></li>
+            </ul>
+          </article>
+
+          <!-- browser handoff -->
+          <article data-reveal class="border-l-4 border-warn bg-white p-6 shadow-e2">
+            <h3 class="font-display text-xl font-bold">browser + take-over handoff</h3>
+            <p class="mt-2 text-sm text-neutral-700">bloop browses real pages on cloudflare browser rendering. when it hits a login wall it hands you the live browser, then carries on.</p>
+            <div class="mt-4 border border-line bg-[#FDF3E7] p-3 text-xs" aria-hidden="true">
+              <p class="font-semibold text-warn">needs you · sign in to continue</p>
+              <p class="mt-2 flex flex-wrap gap-1.5"><span class="rounded-full bg-moss px-3 py-1 font-semibold text-bloop">take over</span><span class="rounded-full bg-white px-3 py-1 ring-1 ring-line">done</span><span class="rounded-full bg-white px-3 py-1 text-neutral-600 ring-1 ring-line">skip</span></p>
+            </div>
+          </article>
+
+          <!-- proof trace -->
+          <article data-reveal class="border-l-4 border-leaf bg-white p-6 shadow-e2">
+            <h3 class="font-display text-xl font-bold">sources + proof trace</h3>
+            <p class="mt-2 text-sm text-neutral-700">answers carry source chips. the proof trace lists every call, every read-back and its hash, chained to the one before.</p>
+            <ul class="mt-4 grid gap-1 text-xs" aria-hidden="true">
+              <li class="flex items-center justify-between gap-2"><span>✓ verify · issue comment</span><span class="mono rounded-full bg-page px-2 py-0.5 text-leaf">#4c1e…</span></li>
+              <li class="flex items-center justify-between gap-2"><span>✓ verify · pr label</span><span class="mono rounded-full bg-page px-2 py-0.5 text-leaf">#a07b… ← 4c1e</span></li>
+            </ul>
+          </article>
+
+          <!-- knowledge -->
+          <article data-reveal class="border-l-4 border-bloop bg-white p-6 shadow-e2">
+            <h3 class="font-display text-xl font-bold">memories · context · lessons</h3>
+            <p class="mt-2 text-sm text-neutral-700">bloop remembers facts you give it, reads a context file you edit, and writes itself a lesson whenever it works around a failure. all three feed every run.</p>
+            <p class="mt-4 flex gap-4 border-b border-line text-xs font-semibold" aria-hidden="true"><span class="text-neutral-600">memories</span><span class="text-neutral-600">context</span><span class="-mb-px border-b-2 border-bloop text-leaf">lessons</span></p>
+            <p class="mono mt-2 text-xs text-neutral-700">- deepwiki needs owner/repo, not a url</p>
+          </article>
+
+          <!-- command palette + signup -->
+          <article data-reveal class="grid gap-4 border-l-4 border-moss bg-white p-6 shadow-e2 md:col-span-2 lg:col-span-3 lg:grid-cols-2 lg:items-center">
+            <div><h3 class="font-display text-xl font-bold">⌘k command palette, open signup</h3>
+            <p class="mt-2 text-sm text-neutral-700">jump to any chat, mode or panel from the keyboard. anyone can sign up, no invite code.</p></div>
+            <div class="border border-line text-xs shadow-e2" aria-hidden="true">
+              <p class="flex items-center justify-between border-b border-line px-3 py-2 text-neutral-500"><span>type a command…</span><span class="mono rounded bg-page px-1.5">⌘K</span></p>
+              <p class="bg-[#EEF6E3] px-3 py-1.5 text-leaf">new chat</p>
+              <p class="px-3 py-1.5">open proof trace</p>
+            </div>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ 5. subagents + workspace ============ -->
+    <section id="subagents" class="bg-white px-4 py-20 sm:px-6 lg:py-28" aria-labelledby="sub-title">
+      <div class="mx-auto grid max-w-6xl items-start gap-10 lg:grid-cols-2">
+        <div>
+          <p class="text-xs font-semibold tracking-[0.2em] text-leaf">subagents + workspace</p>
+          <h2 id="sub-title" class="mt-2 font-display text-4xl font-extrabold leading-tight sm:text-5xl">big jobs get a team, and a place to build</h2>
+          <p class="mt-4 text-neutral-700">bloop can <span class="mono">delegate</span> to subagents that stream live inside the parent run as nested cards.</p>
+          <ul class="mt-6 grid gap-3 text-sm">
+            <li class="border-l-4 border-bloop bg-page p-4"><b class="font-display text-lg">research</b><br /><span class="text-neutral-700">read-only. digs through repos, docs and the web, then reports back with sources.</span></li>
+            <li class="border-l-4 border-leaf bg-page p-4"><b class="font-display text-lg">build</b><br /><span class="text-neutral-700">writes files and runs code in a per-conversation workspace, stored in r2 and executed in cloudflare containers.</span></li>
+          </ul>
+          <p class="mt-6 text-sm text-neutral-700">the workspace opens in an in-app editor with a file tree, edits that land live as the agent writes, and a run console.</p>
+        </div>
+
+        <div data-reveal class="grid gap-3" aria-hidden="true">
+          <!-- nested subagent cards -->
+          <div class="border border-line border-l-4 border-l-bloop bg-white p-3 text-xs shadow-e2">
+            <p class="flex items-center justify-between"><span class="font-semibold">subagent · research</span><span class="rounded-full bg-[#EEF6E3] px-2 py-0.5 font-semibold text-leaf">done · 4 tools</span></p>
+            <p class="mt-1.5 text-neutral-600">found 2 call sites of <span class="mono">merge_delta</span> in core/agent</p>
+          </div>
+          <div class="ml-4 border border-line border-l-4 border-l-leaf bg-white p-3 text-xs shadow-e2">
+            <p class="flex items-center justify-between"><span class="font-semibold">subagent · build</span><span class="rounded-full bg-moss px-2 py-0.5 font-semibold text-bloop">streaming</span></p>
+            <p class="mt-1.5 text-neutral-600">writing <span class="mono">src/merge.test.ts</span>…</p>
+          </div>
+          <!-- editor -->
+          <div class="overflow-hidden border border-line bg-white shadow-e3">
+            <div class="flex items-center justify-between border-b border-line px-3 py-2 text-xs">
+              <span class="font-semibold">workspace</span><span class="rounded-full bg-bloop px-3 py-0.5 font-semibold text-moss">▶ run</span>
+            </div>
+            <div class="grid grid-cols-[7.5rem_1fr] text-xs sm:grid-cols-[9rem_1fr]">
+              <ul class="mono border-r border-line bg-page p-2 leading-6 text-neutral-600">
+                <li>▾ src</li>
+                <li class="pl-3">merge.ts</li>
+                <li class="bg-[#EEF6E3] pl-3 text-leaf">merge.test.ts</li>
+                <li>package.json</li>
+              </ul>
+              <pre class="mono overflow-x-auto p-2 leading-6 text-neutral-800"><code><span class="text-neutral-400">1</span> import { merge } from "./merge";
+<span class="text-neutral-400">2</span> test("keeps order", () =&gt; {
+<span class="text-neutral-400">3</span>   expect(merge(a, b)).toEqual(ab);
+<span class="text-neutral-400">4</span> });</code></pre>
+            </div>
+            <pre class="mono border-t border-line bg-ink px-3 py-2 text-xs leading-5 text-neutral-200"><code>$ npm test
+<span class="text-bloop">✓ keeps order (3ms)</span>
+1 passed</code></pre>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ 6. apps & mcp marketplace ============ -->
+    <section id="apps" class="px-4 py-20 sm:px-6 lg:py-28" aria-labelledby="apps-title">
+      <div class="mx-auto max-w-6xl">
+        <p class="text-xs font-semibold tracking-[0.2em] text-leaf">apps & mcp marketplace</p>
+        <h2 id="apps-title" class="mt-2 font-display text-4xl font-extrabold leading-tight sm:text-5xl">plug in any app. bloop figures out the tools.</h2>
+        <p class="mt-4 max-w-2xl text-neutral-700">tools load on demand, so the model only pulls the schemas it needs. servers connect over streamable http or legacy sse, and a server that fails is skipped while the rest keep working.</p>
+
+        <div class="mt-12 grid gap-4 lg:grid-cols-3">
+          <!-- featured -->
+          <article data-reveal class="border-l-4 border-bloop bg-moss p-6 text-white shadow-e3 lg:row-span-2">
+            <p class="w-fit rounded-full bg-bloop px-3 py-0.5 text-xs font-bold text-moss">featured</p>
+            <h3 class="mt-4 font-display text-3xl font-bold">higgsfield</h3>
+            <p class="mt-2 text-base text-white/90">generate images and video straight from a chat, alongside your github and docs calls.</p>
+            <h4 class="mt-8 text-xs font-semibold tracking-[0.15em] text-bloop">in the catalog</h4>
+            <ul class="mt-3 flex flex-wrap gap-2 text-sm">
+              <li class="rounded-full bg-white/10 px-3 py-1">github</li>
+              <li class="rounded-full bg-white/10 px-3 py-1">deepwiki</li>
+              <li class="rounded-full bg-white/10 px-3 py-1">context7</li>
+              <li class="rounded-full bg-white/10 px-3 py-1">cloudflare docs</li>
+              <li class="rounded-full bg-white/10 px-3 py-1">higgsfield</li>
+              <li class="rounded-full bg-white/10 px-3 py-1">zapier (optional)</li>
+              <li class="rounded-full bg-white/10 px-3 py-1">composio (optional)</li>
+            </ul>
+          </article>
+
+          <!-- custom mcp -->
+          <article data-reveal class="border-l-4 border-bloop bg-white p-6 shadow-e2">
+            <h3 class="font-display text-xl font-bold">bring your own mcp server</h3>
+            <p class="mt-2 text-sm text-neutral-700">paste a url and pick how it signs in. oauth runs the full flow with dynamic client registration and pkce.</p>
+            <p class="mt-4 flex flex-wrap gap-1.5 text-xs font-semibold" aria-hidden="true">
+              <span class="rounded-full bg-page px-3 py-1 text-neutral-600">none</span><span class="rounded-full bg-page px-3 py-1 text-neutral-600">bearer</span><span class="rounded-full bg-page px-3 py-1 text-neutral-600">headers</span><span class="rounded-full bg-moss px-3 py-1 text-bloop">oauth 2.1</span>
+            </p>
+          </article>
+
+          <!-- mcp apps -->
+          <article data-reveal class="border-l-4 border-bloop bg-white p-6 shadow-e2">
+            <h3 class="font-display text-xl font-bold">mcp apps with ui</h3>
+            <p class="mt-2 text-sm text-neutral-700">when a tool returns an interactive ui, bloop renders it in a sandboxed iframe inside the chat, and it can call back into its server.</p>
+          </article>
+
+          <!-- built-in toggles -->
+          <article data-reveal class="border-l-4 border-leaf bg-white p-6 shadow-e2">
+            <h3 class="font-display text-xl font-bold">built-in tool toggles</h3>
+            <ul class="mt-3 grid gap-2 text-sm" aria-hidden="true">
+              <li class="flex items-center justify-between"><span class="mono">browse</span><span class="flex h-5 w-9 items-center justify-end rounded-full bg-leaf p-0.5"><span class="h-4 w-4 rounded-full bg-white"></span></span></li>
+              <li class="flex items-center justify-between"><span class="mono">run_code</span><span class="flex h-5 w-9 items-center justify-end rounded-full bg-leaf p-0.5"><span class="h-4 w-4 rounded-full bg-white"></span></span></li>
+              <li class="flex items-center justify-between"><span class="mono">generate_image</span><span class="flex h-5 w-9 items-center rounded-full bg-neutral-300 p-0.5"><span class="h-4 w-4 rounded-full bg-white"></span></span></li>
+            </ul>
+            <p class="mt-3 text-sm text-neutral-700">switch built-in tools on or off per account.</p>
+          </article>
+
+          <!-- skills -->
+          <article data-reveal class="border-l-4 border-moss bg-white p-6 shadow-e2">
+            <h3 class="font-display text-xl font-bold">skills marketplace</h3>
+            <p class="mt-2 text-sm text-neutral-700">install prefab skills from the catalog, or let bloop write its own with <span class="mono">create_skill</span>. skills load only when a task needs them.</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ 7. reliability ============ -->
+    <section id="reliability" class="on-dark bg-moss px-4 py-20 text-white sm:px-6 lg:py-28" aria-labelledby="rel-title">
+      <div class="mx-auto max-w-6xl">
+        <p class="text-xs font-semibold tracking-[0.2em] text-bloop">reliability & evaluation</p>
+        <h2 id="rel-title" class="mt-2 font-display text-4xl font-extrabold leading-tight sm:text-5xl">tested against production, not a demo script</h2>
+
+        <div class="mt-12 grid gap-10 lg:grid-cols-[0.9fr_1.1fr]">
+          <div data-reveal>
+            <p class="font-display text-8xl font-extrabold leading-none text-bloop sm:text-9xl"><span class="tabular">6/6</span></p>
+            <p class="mt-3 text-lg">evals pass against the live deployment. each checks the streamed trace and then confirms the result on github itself.</p>
+            <ol class="mt-6 grid gap-2 text-sm text-white/90">
+              <li class="border-l-2 border-bloop pl-3">read-only github lookup</li>
+              <li class="border-l-2 border-bloop pl-3">write + verify by read-back</li>
+              <li class="border-l-2 border-bloop pl-3">research → write (deepwiki + github)</li>
+              <li class="border-l-2 border-bloop pl-3">multi-app digest (github + cloudflare docs)</li>
+              <li class="border-l-2 border-bloop pl-3">sandbox code execution</li>
+              <li class="border-l-2 border-bloop pl-3">an impossible task that must be reported as a failure</li>
+            </ol>
+          </div>
+
+          <div class="grid gap-6">
+            <div data-reveal>
+              <h3 class="font-display text-2xl font-bold">hash-chained ledger</h3>
+              <ol class="mt-4 grid gap-2 sm:grid-cols-3" aria-label="example ledger chain">
+                <li class="border-l-4 border-bloop bg-white/5 p-3 text-sm"><span class="text-white/70">entry 1</span><br /><span class="mono text-bloop">#7b2d…04aa</span></li>
+                <li class="border-l-4 border-bloop bg-white/5 p-3 text-sm"><span class="text-white/70">entry 2 ← 7b2d</span><br /><span class="mono text-bloop">#9f3a…c21e</span></li>
+                <li class="border-l-4 border-bloop bg-white/5 p-3 text-sm"><span class="text-white/70">entry 3 ← 9f3a</span><br /><span class="mono text-bloop">#e61b…7d09</span></li>
+              </ol>
+              <p class="mt-3 text-sm text-white/85">change any entry and every hash after it breaks.</p>
+            </div>
+            <div data-reveal>
+              <h3 class="font-display text-2xl font-bold">failure protection</h3>
+              <ul class="mt-4 grid gap-2 text-sm text-white/90 sm:grid-cols-2">
+                <li class="border-l-2 border-bloop/60 pl-3">per-tool timeouts</li>
+                <li class="border-l-2 border-bloop/60 pl-3">per-server circuit breaker</li>
+                <li class="border-l-2 border-bloop/60 pl-3">mcp retries, backoff and re-init</li>
+                <li class="border-l-2 border-bloop/60 pl-3">error kinds + retry counts, shown in the ui</li>
+                <li class="border-l-2 border-bloop/60 pl-3">bad tool arguments self-corrected</li>
+                <li class="border-l-2 border-bloop/60 pl-3">model fallback: stream → non-stream → backup model</li>
+                <li class="border-l-2 border-bloop/60 pl-3">unverified writes flagged</li>
+                <li class="border-l-2 border-bloop/60 pl-3">errors reported, never papered over</li>
+              </ul>
+            </div>
+            <p class="flex flex-wrap gap-3 text-sm">
+              <a href="https://github.com/karanxa1/bloop/blob/main/RELIABILITY.md" target="_blank" rel="noopener noreferrer" class="rounded-full border border-white/40 px-4 py-2 font-semibold hover:bg-white hover:text-moss">read RELIABILITY.md</a>
+              <a href="https://github.com/karanxa1/bloop/tree/main/evals" target="_blank" rel="noopener noreferrer" class="rounded-full border border-white/40 px-4 py-2 font-semibold hover:bg-white hover:text-moss">see the evals</a>
+            </p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ 8. tech stack ============ -->
+    <section id="stack" class="bg-white px-4 py-20 sm:px-6 lg:py-24" aria-labelledby="stack-title">
+      <div class="mx-auto max-w-6xl">
+        <p class="text-xs font-semibold tracking-[0.2em] text-leaf">tech stack</p>
+        <h2 id="stack-title" class="mt-2 font-display text-4xl font-extrabold leading-tight sm:text-5xl">rust on the edge, all on cloudflare</h2>
+        <div class="mt-10 grid gap-4 md:grid-cols-3">
+          <div data-reveal class="border-l-4 border-bloop bg-page p-5">
+            <h3 class="font-display text-xl font-bold">agent core</h3>
+            <p class="mt-2 text-sm text-neutral-700">rust compiled to wasm on cloudflare workers: streaming agent loop, a hand-written mcp client and the ledger.</p>
+          </div>
+          <div data-reveal class="border-l-4 border-bloop bg-page p-5">
+            <h3 class="font-display text-xl font-bold">data + sandbox</h3>
+            <p class="mt-2 text-sm text-neutral-700">d1 for users, chats and servers · kv sessions · r2 files and workspaces · containers for code · browser rendering for the web.</p>
+          </div>
+          <div data-reveal class="border-l-4 border-bloop bg-page p-5">
+            <h3 class="font-display text-xl font-bold">web app</h3>
+            <p class="mt-2 text-sm text-neutral-700">react 19, vite and tailwind v4, streamed over server-sent events. deployed by github actions after checks pass.</p>
+          </div>
+        </div>
+        <ul class="mt-6 flex flex-wrap gap-2 text-xs font-semibold text-neutral-700" aria-label="technologies">
+          <li class="rounded-full bg-page px-3 py-1">rust → wasm</li><li class="rounded-full bg-page px-3 py-1">workers</li><li class="rounded-full bg-page px-3 py-1">d1</li><li class="rounded-full bg-page px-3 py-1">kv</li><li class="rounded-full bg-page px-3 py-1">r2</li><li class="rounded-full bg-page px-3 py-1">containers</li><li class="rounded-full bg-page px-3 py-1">browser rendering</li><li class="rounded-full bg-page px-3 py-1">mcp</li><li class="rounded-full bg-page px-3 py-1">react 19</li><li class="rounded-full bg-page px-3 py-1">tailwind v4</li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- ============ 9. cta ============ -->
+    <section class="on-dark relative overflow-hidden px-4 py-24 sm:px-6 sm:py-32" aria-labelledby="cta-title">
+      <img src="/landing/assets/cta-bg.webp" width="1536" height="1024" loading="lazy" decoding="async" alt="" class="absolute inset-0 h-full w-full object-cover" />
+      <div class="absolute inset-0 bg-moss/85" aria-hidden="true"></div>
+      <div class="relative mx-auto max-w-3xl text-center">
+        <h2 id="cta-title" class="sticker font-display text-5xl font-extrabold leading-[0.95] text-bloop sm:text-7xl">give the blob a goal</h2>
+        <p class="mx-auto mt-6 max-w-md text-lg text-white">sign up in seconds, no invite code. connect an app and watch it work.</p>
+        <div class="mt-10 flex flex-wrap justify-center gap-3">
+          <a href="/app" class="inline-flex h-12 items-center rounded-full bg-bloop px-8 font-display text-lg font-bold text-moss transition-colors hover:bg-white">open the app</a>
+          <a href="https://github.com/karanxa1/bloop" target="_blank" rel="noopener noreferrer" class="inline-flex h-12 items-center rounded-full border border-white/60 px-6 font-display text-lg font-bold text-white transition-colors hover:bg-white hover:text-moss">view on github</a>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- ============ footer ============ -->
+  <footer class="on-dark bg-moss px-4 py-12 text-white sm:px-6">
+    <div class="mx-auto flex max-w-6xl flex-col gap-8 sm:flex-row sm:items-center sm:justify-between">
+      <a href="#top" class="flex items-center gap-2">
+        <img src="/landing/assets/logo-blob.webp" width="32" height="32" loading="lazy" decoding="async" alt="" class="h-8 w-8" />
+        <span class="font-display text-2xl font-extrabold text-bloop">bloop</span>
       </a>
       <nav aria-label="footer">
-        <ul class="flex flex-wrap gap-x-6 gap-y-2 text-sm text-white/80">
-          <li><a href="#features" class="hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white">features</a></li>
-          <li><a href="#numbers" class="hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white">numbers</a></li>
-          <li><a href="#access" class="hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white">access</a></li>
-          <li><a href="/app" class="hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white">log in</a></li>
-          <li><a href="mailto:hi@bloop.do" class="hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white">contact</a></li>
+        <ul class="flex flex-wrap gap-x-6 gap-y-2 text-sm text-white/85">
+          <li><a href="/app" class="hover:text-bloop">open the app</a></li>
+          <li><a href="https://github.com/karanxa1/bloop" target="_blank" rel="noopener noreferrer" class="hover:text-bloop">github</a></li>
+          <li><a href="https://github.com/karanxa1/bloop/blob/main/README.md" target="_blank" rel="noopener noreferrer" class="hover:text-bloop">README.md</a></li>
+          <li><a href="https://github.com/karanxa1/bloop/blob/main/RELIABILITY.md" target="_blank" rel="noopener noreferrer" class="hover:text-bloop">RELIABILITY.md</a></li>
+          <li><a href="/llms.txt" class="hover:text-bloop">llms.txt</a></li>
         </ul>
       </nav>
-      <p class="text-xs text-white/60">© 2025 bloop. one blob, zero chill.</p>
+      <p class="text-sm text-white/75">© 2026 bloop · tiny blob. big brain.</p>
     </div>
   </footer>
 
-  <!-- reveal-on-scroll observer + count-up (the only js on the page) -->
-  <script>
-    const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
-    const setCount = (n, v) => { n.textContent = Math.round(v) + n.dataset.suffix; };
-    const run = (el) => {
-      el.classList.add('animate-reveal');
-      const n = el.querySelector('[data-count]');
-      if (!n || n.dataset.done) return;
-      n.dataset.done = '1';
-      if (reduce) { setCount(n, +n.dataset.count); return; }
-      const target = +n.dataset.count, t0 = performance.now();
-      requestAnimationFrame(function tick(t) {
-        const p = Math.min((t - t0) / 900, 1);
-        setCount(n, target * (p * (2 - p)));
-        if (p < 1) requestAnimationFrame(tick);
-      });
-    };
-    const io = new IntersectionObserver((entries) => {
-      entries.forEach((e) => {
-        if (!e.isIntersecting) return;
-        if (reduce) e.target.style.opacity = '1'; else run(e.target);
-        if (reduce) { const n = e.target.querySelector('[data-count]'); if (n) setCount(n, +n.dataset.count); }
-        io.unobserve(e.target);
-      });
-    }, { threshold: 0.3 });
-    document.querySelectorAll('[data-reveal]').forEach((el) => io.observe(el));
-  </script>
 </body>
 </html>

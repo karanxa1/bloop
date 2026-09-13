@@ -8,6 +8,62 @@
   --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
 }
 
+/* ── design tokens v4 (additive; `static` = always emitted as css vars) ──
+   status: base = fills/icons/borders · -text = ≥4.5:1 on #fff AND #f2f2f2 · -soft = tint bg
+   note: --color-bloop-deep (#5c8a2c) is only 4.1:1 on white — use --color-bloop-ink for small text */
+@theme static {
+  --color-bloop-ink: #3f6b1f; /* 6.3:1 white · 5.6:1 page */
+  --color-bloop-night: #1f2d10; /* text on lime (7.1:1) · dark panels */
+  --color-surface: #ffffff;
+  --color-line: #e5e5e5;
+
+  --color-ok: #5c8a2c;
+  --color-ok-text: #3f6b1f;
+  --color-ok-soft: #eef6e3;
+  --color-run: #8dc63f;
+  --color-warn: #b45309;
+  --color-warn-text: #9a4a06; /* 6.3:1 / 5.6:1 */
+  --color-warn-soft: #fdf3e7;
+  --color-err: #dc2626;
+  --color-err-text: #b91c1c; /* 6.5:1 / 5.8:1 */
+  --color-err-soft: #fdecec;
+  --color-error: #dc2626; /* alias of --color-err */
+  --color-error-text: #b91c1c;
+  --color-degraded: #a16207;
+  --color-degraded-text: #8a5a00; /* 5.9:1 / 5.3:1 */
+  --color-degraded-soft: #fbf5e6;
+  --color-info: #1d4ed8;
+  --color-info-text: #1d4ed8; /* 6.7:1 / 6.0:1 */
+  --color-info-soft: #eaf0fd;
+
+  /* focus ring */
+  --color-focus: #3f6b1f;
+  --focus-ring: 0 0 0 2px var(--color-page), 0 0 0 4px var(--color-focus);
+
+  /* elevation — sharp, low-blur, never floaty (→ shadow-e1 … shadow-e3, shadow-hard) */
+  --shadow-e1: 0 1px 0 rgb(23 23 23 / 0.04), 0 1px 2px rgb(23 23 23 / 0.06);
+  --shadow-e2: 0 1px 0 rgb(23 23 23 / 0.05), 0 4px 10px -2px rgb(23 23 23 / 0.1);
+  --shadow-e3: 0 2px 0 rgb(23 23 23 / 0.05), 0 12px 28px -6px rgb(23 23 23 / 0.18);
+  --shadow-hard: 4px 4px 0 var(--color-bloop-night);
+
+  /* motion (→ ease-out / ease-in / ease-spring utilities; durations via var()) */
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-in: cubic-bezier(0.4, 0, 1, 1);
+  --ease-spring: cubic-bezier(0.3, 1.6, 0.5, 1);
+  --dur-1: 120ms; /* hover */
+  --dur-2: 180ms; /* expand */
+  --dur-3: 240ms; /* panel */
+  --dur-4: 400ms; /* hero */
+}
+
+/* global focus baseline (per-element focus-visible:ring-* utilities still win) */
+@layer base {
+  :focus-visible {
+    outline: 2px solid var(--color-focus);
+    outline-offset: 2px;
+  }
+}
+
 html,
 body,
 #root {
@@ -376,4 +432,149 @@ select {
 .scroll-thin {
   scrollbar-width: thin;
   scrollbar-color: var(--color-neutral-300) transparent;
+}
+
+/* ── motion utilities v4 (use with motion-safe: or rely on the guard below) ── */
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+}
+@utility fade-in {
+  animation: fade-in var(--dur-3) var(--ease-out) both;
+}
+@keyframes slide-up {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+@utility slide-up {
+  animation: slide-up var(--dur-3) var(--ease-out) both;
+}
+/* lime sweep over any positioned card (generalised .tool-running) */
+@utility sweep {
+  position: relative;
+  overflow: hidden;
+  &::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background: linear-gradient(90deg, transparent, rgb(141 198 63 / 0.14) 50%, transparent);
+    animation: sweep 1.5s ease-in-out infinite;
+  }
+}
+/* sharp loading placeholder; caller sets height */
+@utility skeleton {
+  position: relative;
+  overflow: hidden;
+  background: var(--color-neutral-200);
+  &::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(90deg, transparent, rgb(255 255 255 / 0.6) 50%, transparent);
+    animation: sweep 1.4s ease-in-out infinite;
+  }
+}
+/* thinking dots: <span class="blob-dots"><i></i><i></i><i></i></span> */
+@keyframes blob-dot {
+  0%,
+  60%,
+  100% {
+    transform: translateY(0);
+  }
+  30% {
+    transform: translateY(-3px);
+  }
+}
+@utility blob-dots {
+  display: inline-flex;
+  gap: 3px;
+  align-items: center;
+  & > * {
+    width: 6px;
+    height: 6px;
+    border-radius: 9999px;
+    background: var(--color-bloop);
+    animation: blob-dot 900ms ease-in-out infinite;
+  }
+  & > :nth-child(2) {
+    animation-delay: 150ms;
+  }
+  & > :nth-child(3) {
+    animation-delay: 300ms;
+  }
+}
+/* row highlight after an update */
+@keyframes flash {
+  from {
+    background-color: rgb(141 198 63 / 0.2);
+  }
+  to {
+    background-color: transparent;
+  }
+}
+@utility flash {
+  animation: flash 900ms var(--ease-out) both;
+}
+/* active plan node */
+@keyframes pulse-ring {
+  0% {
+    box-shadow: 0 0 0 0 rgb(141 198 63 / 0.55);
+  }
+  100% {
+    box-shadow: 0 0 0 8px rgb(141 198 63 / 0);
+  }
+}
+@utility pulse-ring {
+  animation: pulse-ring 1.4s var(--ease-out) infinite;
+}
+@keyframes caret-blink {
+  50% {
+    opacity: 0;
+  }
+}
+@utility caret-blink {
+  animation: caret-blink 1s steps(1) infinite;
+}
+/* height collapse without measuring: <div class="grid-collapse" data-open><div>…</div></div>
+   (named grid-collapse: tailwind's built-in `collapse` = visibility:collapse) */
+@utility grid-collapse {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows var(--dur-2) var(--ease-out);
+  &[data-open="true"],
+  &[data-open=""] {
+    grid-template-rows: 1fr;
+  }
+  & > * {
+    min-height: 0;
+    overflow: hidden;
+  }
+}
+@utility focus-ring {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+@utility tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── global reduced-motion guard (keep last) ───────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  .shimmer-text {
+    animation: none !important;
+    background: none !important;
+    color: var(--color-neutral-600) !important;
+  }
 }

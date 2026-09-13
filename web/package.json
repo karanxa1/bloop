@@ -4,8 +4,8 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "rm -rf public/landing && cp -r ../landing public/landing && tailwindcss -i ../landing/tailwind.css -o public/landing/landing.css --minify && rm public/landing/tailwind.css; vite",
-    "build": "rm -rf public/landing && cp -r ../landing public/landing && tailwindcss -i ../landing/tailwind.css -o public/landing/landing.css --minify && rm public/landing/tailwind.css && tsc -b && vite build",
+    "dev": "rm -rf public/landing && cp -r ../landing public/landing && tailwindcss -i public/landing/tailwind.css -o public/landing/landing.css --minify && rm public/landing/tailwind.css; vite",
+    "build": "rm -rf public/landing && cp -r ../landing public/landing && tailwindcss -i public/landing/tailwind.css -o public/landing/landing.css --minify && rm public/landing/tailwind.css && tsc -b && vite build",
     "preview": "vite preview"
   },
   "dependencies": {

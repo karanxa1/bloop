@@ -232,3 +232,34 @@ D1 schema → core worker + SPA → smoke test.
 Cloudflare Workers (Rust→WASM + TS) · D1 · KV · R2 · Workers Assets · service bindings ·
 Containers (`@cloudflare/sandbox`) · Browser Rendering · MCP (streamable HTTP + OAuth 2.1) ·
 Azure OpenAI gpt-5.6 + gpt-image · Deepgram (voice) · React 19 · Vite · Tailwind v4 · GitHub Actions.
+
+## Built from scratch
+
+Every line of bloop was written for this hackathon — no starter agent, no template product
+code, no vendored framework. The Rust agent core, the hand-rolled streamable-HTTP MCP client
+with OAuth 2.1, the hash-chained attestation ledger, the React chat UI, the landing page, the
+sandbox worker, and this README were all authored in this repo during the event. The git
+history is the audit trail — `git log` shows the build in order, commit by commit.
+
+<details>
+<summary><b>File &amp; folder creation timeline</b> (from <code>git log --diff-filter=A</code>, UTC)</summary>
+
+| Created | Path | What it is |
+|---|---|---|
+| 09-13 | `src/`, `wrangler.jsonc`, `package.json`, `index.html` | initial Agents-SDK prototype (superseded by `core/` — kept for reference) |
+| 09-13 | `core/` (`Cargo.toml`, `src/agent.rs`, `wrangler.toml`) | Rust→WASM agent runtime — the production backend |
+| 09-13 | `web/` (`src/`, `vite.config.ts`) | React + Tailwind chat app with live proof trace |
+| 09-13 | `landing/` (`index.html`, `assets/`) | single-file landing page + AI-generated imagery |
+| 09-13 | `evals/` (`run.mjs`) | eval harness — external ground-truth checks |
+| 09-13 | `RELIABILITY.md`, `DEMO-SCRIPT.md`, `scripts/` | reliability brief, demo narration, asset pipeline |
+| 09-14 | `core/schema.sql` | D1 schema — users, conversations, messages, memories, `user_files`, servers, attestations |
+| 09-14 | `core/src/` +12 modules | auth, marketplace, mcp, sandbox, browser, voice, tools registry, config… |
+| 09-14 | `sandbox/` (`src/index.ts`, `Dockerfile`, `wrangler.toml`) | container worker — code exec, workspace, remote browser, live screencast |
+| 09-14 | `.github/workflows/` | CI (semgrep) + CD (`deploy.yml`: check → sandbox → d1 → core → smoke) |
+| 09-14 | `docs/` | `contracts-v3.md`, `USE-BLOOP.md`, `ui-spec.md`, `security-audit.md`, `SESSION-HANDOFF.md` |
+| 09-14 | `web/src/` +46 files | v3 UI — modes, marketplace modal, workspace editor, voice orb, LiveBrowser, ProofTrace |
+| 09-14 | `evals/report-*.md` (8 files) | timestamped production eval reports — 6/6 passing |
+
+Full history: `git log --oneline --reverse`.
+
+</details>

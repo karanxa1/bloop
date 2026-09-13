@@ -13,7 +13,7 @@ import { dirname, join } from "node:path";
 
 const PORT = Number(process.env.PORT ?? 8787);
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
-const hero = readFileSync(join(ROOT, "public/assets/hero.jpg"));
+const hero = readFileSync(join(ROOT, "public/assets/hero.webp"));
 
 // ── state ────────────────────────────────────────────────────────
 let n = 0;
@@ -105,6 +105,20 @@ async function streamChat(req, res, body, user) {
   const wantsCode = /python|code|fibonacci|run|compute|plot/.test(lower);
   const wantsRemember = /remember/.test(lower);
   const wantsForget = /forget/.test(lower);
+  const mode = ["default", "think", "deep"].includes(body.mode) ? body.mode : "default";
+  const wantsDeep = mode === "deep" || /research|deep/.test(lower);
+  const wantsHandoff = /login|log in|browser|handoff/.test(lower);
+  const persistedParts = [];
+
+  sse(res, "mode", { mode });
+  for (const s of ["github", "deepwiki", "legacy-crm"]) sse(res, "server", { name: s, state: "connecting" });
+  await sleep(300);
+  sse(res, "server", { name: "github", state: "connected", tools: 24 });
+  await sleep(180);
+  sse(res, "server", { name: "deepwiki", state: "connected", tools: 3 });
+  await sleep(160);
+  sse(res, "server", { name: "legacy-crm", state: "error" });
+  await sleep(150);
 
   sse(res, "tools_loaded", { names: ["github.list_repos", "github.create_issue", "memory.remember", "image.generate", "python.run"] });
   await sleep(250);
@@ -128,6 +142,51 @@ async function streamChat(req, res, body, user) {
   if (wantsForget) {
     const gone = memories.shift();
     sse(res, "memory", { action: "forget", content: gone?.content ?? "nothing to forget" });
+    await sleep(200);
+  }
+
+  if (wantsHandoff) {
+    sse(res, "handoff", { url: "https://github.com/login", reason: "github needs you to sign in (2fa) before i can open your private repos.", session_id: "bs_demo" });
+    persistedParts.push({ kind: "handoff", url: "https://github.com/login", reason: "github needs you to sign in (2fa) before i can open your private repos." });
+    await sleep(200);
+  }
+
+  if (wantsDeep) {
+    // two parallel direct calls, then a delegated subagent that streams text
+    sse(res, "tool_call", { id: "tc_p1", name: "web.search", app: "bloop", args: { q: message.slice(0, 40) } });
+    sse(res, "tool_call", { id: "tc_p2", name: "deepwiki.ask", app: "deepwiki", args: { repo: "karanxa1/swarm" } });
+    await sleep(700);
+    sse(res, "tool_result", { id: "tc_p1", ok: true, ms: 690, output: "5 results" });
+    await sleep(250);
+    sse(res, "tool_result", { id: "tc_p2", ok: false, ms: 940, output: "rate limited" });
+    sse(res, "tool_call", { id: "tc_del", name: "delegate", app: "bloop", args: { task: "compare the top 3 sources" } });
+    sse(res, "subagent_start", { id: "sa_1", task: "compare the top 3 sources and extract pricing" });
+    await sleep(250);
+    for (const w of "reading the three pages side by side… ".split(" ")) { sse(res, "subagent_delta", { id: "sa_1", text: w + " " }); await sleep(40); }
+    sse(res, "tool_call", { id: "tc_s1", name: "browser.open", app: "bloop", args: { url: "https://example.com/pricing" }, parent: "sa_1" });
+    sse(res, "tool_call", { id: "tc_s2", name: "browser.open", app: "bloop", args: { url: "https://vercel.com/pricing" }, parent: "sa_1" });
+    await sleep(900);
+    sse(res, "tool_result", { id: "tc_s1", ok: true, ms: 880, output: "pricing: $0 / $20 / custom", parent: "sa_1" });
+    sse(res, "tool_result", { id: "tc_s2", ok: true, ms: 905, output: "hobby / pro / enterprise", parent: "sa_1" });
+    const items = [
+      { url: "https://example.com/pricing", title: "example pricing" },
+      { url: "https://vercel.com/pricing", title: "vercel — pricing" },
+      { url: "https://developer.mozilla.org/en-US/docs/Web/API/View_Transition_API", title: "view transition api — mdn" }
+    ];
+    sse(res, "sources", { items: items.slice(0, 2) });
+    await sleep(300);
+    sse(res, "sources", { items });
+    sse(res, "subagent_end", { id: "sa_1", ok: true, summary: "all three offer a **free tier**; paid plans start at $20/mo." });
+    sse(res, "tool_result", { id: "tc_del", ok: true, ms: 1900, output: "subagent finished" });
+    persistedParts.push(
+      { kind: "tool", id: "tc_p1", name: "web.search", app: "bloop", args: {}, ok: true, ms: 690, output: "5 results" },
+      { kind: "tool", id: "tc_del", name: "delegate", app: "bloop", args: {}, ok: true, ms: 1900, output: "subagent finished" },
+      { kind: "subagent", id: "sa_1", task: "compare the top 3 sources and extract pricing", ok: true, summary: "all three offer a **free tier**; paid plans start at $20/mo.", tools: [
+        { id: "tc_s1", name: "browser.open", app: "bloop", args: { url: "https://example.com/pricing" }, ok: true, ms: 880, output: "pricing" },
+        { id: "tc_s2", name: "browser.open", app: "bloop", args: {}, ok: true, ms: 905, output: "plans" }
+      ] },
+      { kind: "sources", items }
+    );
     await sleep(200);
   }
 
@@ -185,7 +244,7 @@ async function streamChat(req, res, body, user) {
     convo.messages.push({
       role: "assistant",
       content: reply,
-      parts: [{ kind: "text", text: reply }]
+      parts: [...persistedParts, { kind: "text", text: reply }]
     });
     convo.updated_at = new Date().toISOString();
     if (convo.title === "new chat") convo.title = message.slice(0, 42) || "new chat";
@@ -216,7 +275,7 @@ const server = http.createServer(async (req, res) => {
 
     // files — serve the hero image as the demo artifact
     if (path.startsWith("/files/")) {
-      res.writeHead(200, { "content-type": "image/jpeg" });
+      res.writeHead(200, { "content-type": "image/webp" });
       return res.end(hero);
     }
 

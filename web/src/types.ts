@@ -58,11 +58,15 @@ export interface DeltaEvent {
   text: string;
 }
 
+export type ChatMode = "default" | "think" | "deep";
+
 export interface ToolCallEvent {
   id: string;
   name: string;
   app?: string;
   args: unknown;
+  /** subagent id when emitted inside a delegated run */
+  parent?: string;
 }
 
 export interface ToolResultEvent {
@@ -72,6 +76,49 @@ export interface ToolResultEvent {
   ok: boolean;
   ms: number;
   output: string;
+  parent?: string;
+}
+
+export interface ModeEvent {
+  mode: ChatMode;
+}
+
+export interface HandoffEvent {
+  url: string;
+  reason: string;
+  session_id: string;
+}
+
+export interface SubagentStartEvent {
+  id: string;
+  task: string;
+}
+
+export interface SubagentEndEvent {
+  id: string;
+  ok: boolean;
+  summary: string;
+}
+
+export interface SourceItem {
+  url: string;
+  title?: string;
+}
+
+export interface SourcesEvent {
+  items: SourceItem[];
+}
+
+export interface SubagentDeltaEvent {
+  id: string;
+  text: string;
+}
+
+/** `server` frame — one MCP server's connection progress at run start */
+export interface McpServerFrame {
+  name: string;
+  state: string; // "connecting" | "connected" | "ok" | "error" …
+  tools?: number | string[];
 }
 
 export interface PlanEvent {
@@ -88,6 +135,7 @@ export interface VerifyEvent {
 export interface ImageEvent {
   url: string;
   prompt?: string;
+  parent?: string;
 }
 
 export interface CodeEvent {
@@ -95,6 +143,7 @@ export interface CodeEvent {
   source: string;
   output?: string;
   ok?: boolean;
+  parent?: string;
 }
 
 export interface MemoryEvent {
@@ -146,6 +195,21 @@ export interface ToolCall {
   ms?: number;
   output?: string;
   seq: number; // arrival order for the trace feed
+  /** subagent id when the call ran inside a delegated run */
+  parent?: string;
+  /** Date.now() when the call started (live calls only) — drives the elapsed counter */
+  startedAt?: number;
+  /** position within a burst of parallel calls — drives the entry stagger */
+  stagger?: number;
+}
+
+export interface Subagent {
+  id: string;
+  task: string;
+  status: ToolStatus;
+  summary?: string;
+  /** tool / code / image parts emitted inside this subagent */
+  parts: MessagePart[];
 }
 
 export interface VerifyEntry {
@@ -167,13 +231,23 @@ export type MessagePart =
       source: string;
       output?: string;
       ok?: boolean;
-    };
+    }
+  | { kind: "handoff"; id: string; url: string; reason: string; sessionId?: string }
+  | { kind: "subagent"; id: string }; // id matches a Subagent id
 
 export interface ChatMessage {
   id: string;
   role: "user" | "assistant";
   parts: MessagePart[];
   tools: Record<string, ToolCall>;
+  /** delegated runs, keyed by subagent id */
+  subagents?: Record<string, Subagent>;
+  /** cumulative sources cited in this reply */
+  sources?: SourceItem[];
+  /** reasoning mode the run started with */
+  mode?: ChatMode;
+  /** MCP servers connecting for this run, keyed by name */
+  servers?: Record<string, McpServerFrame>;
   error?: string;
   /** true when hydrated from GET /api/conversations/:id — excluded from the live trace */
   loaded?: boolean;
@@ -190,7 +264,17 @@ export type TraceItem =
     }
   | { kind: "memory"; seq: number; memory: MemoryEvent }
   | { kind: "file"; seq: number; file: FileEvent }
-  | { kind: "tools"; seq: number; names: string[] };
+  | { kind: "tools"; seq: number; names: string[] }
+  | { kind: "handoff"; seq: number; handoff: { url: string; reason: string } }
+  | {
+      kind: "subagent";
+      seq: number;
+      phase: "start" | "end";
+      id: string;
+      task: string;
+      ok?: boolean;
+      summary?: string;
+    };
 
 // mutating tool names — a result from one of these without a matching
 // verify event counts as an "unverified write"

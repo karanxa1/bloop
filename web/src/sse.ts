@@ -81,6 +81,7 @@ export interface ChatRequestBody {
   conversation_id: string;
   message: string;
   model: string;
+  mode: "default" | "think" | "deep";
 }
 
 /** POST /api/chat and dispatch each SSE event to onEvent. Resolves on stream end. */

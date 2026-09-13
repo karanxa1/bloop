@@ -58,13 +58,12 @@ export function login(email: string, password: string): Promise<User> {
 export function signup(
   email: string,
   password: string,
-  name: string,
-  invite_code: string
+  name: string
 ): Promise<User> {
   return req<User>("/api/auth/signup", {
     method: "POST",
     headers: JSON_HEADERS,
-    body: JSON.stringify({ email, password, name, invite_code })
+    body: JSON.stringify({ email, password, name })
   });
 }
 

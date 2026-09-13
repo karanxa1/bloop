@@ -48,9 +48,14 @@ export function MarketplaceModal({ onClose, onChanged }: MarketplaceModalProps) 
   const [token, setToken] = useState("");
   const [formError, setFormError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [removingId, setRemovingId] = useState<string | null>(null);
+  const [removeErrorId, setRemoveErrorId] = useState<string | null>(null);
+  const [reloadTick, setReloadTick] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
+    setLoading(true);
+    setLoadError(false);
     listServers()
       .then((s) => {
         if (!cancelled) setServers(s);
@@ -64,7 +69,7 @@ export function MarketplaceModal({ onClose, onChanged }: MarketplaceModalProps) 
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [reloadTick]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -97,12 +102,17 @@ export function MarketplaceModal({ onClose, onChanged }: MarketplaceModalProps) 
   };
 
   const remove = async (id: string) => {
+    if (removingId) return;
+    setRemovingId(id);
+    setRemoveErrorId(null);
     try {
       await deleteServer(id);
       setServers((s) => s.filter((x) => x.id !== id));
       onChanged?.();
     } catch {
-      /* leave the card in place */
+      setRemoveErrorId(id); // leave the card in place with an inline note
+    } finally {
+      setRemovingId(null);
     }
   };
 
@@ -143,13 +153,41 @@ export function MarketplaceModal({ onClose, onChanged }: MarketplaceModalProps) 
         {/* server grid */}
         <div className="mt-4">
           {loading ? (
-            <div className="flex items-center gap-2 py-8 text-xs text-neutral-400">
-              <SpinnerIcon className="h-4 w-4" /> loading servers…
+            <div aria-busy="true">
+              <span className="sr-only">loading servers…</span>
+              <ul className="grid gap-3 sm:grid-cols-2" aria-hidden="true">
+                {[0, 1, 2, 3].map((i) => (
+                  <li key={i} className="border border-neutral-200 bg-white p-3.5">
+                    <div className="flex items-start gap-2.5">
+                      <span className="h-9 w-9 shrink-0 bg-neutral-100 motion-safe:animate-pulse" />
+                      <span className="min-w-0 flex-1 space-y-1.5 pt-0.5">
+                        <span className="block h-3 w-1/2 bg-neutral-200 motion-safe:animate-pulse" />
+                        <span className="block h-2 w-4/5 bg-neutral-100 motion-safe:animate-pulse" />
+                      </span>
+                    </div>
+                    <div className="mt-3 flex gap-1.5">
+                      <span className="h-4 w-12 rounded-full bg-neutral-100 motion-safe:animate-pulse" />
+                      <span className="h-4 w-14 rounded-full bg-neutral-100 motion-safe:animate-pulse" />
+                    </div>
+                  </li>
+                ))}
+              </ul>
             </div>
           ) : loadError ? (
-            <p className="flex items-center gap-2 py-8 text-xs text-red-600">
-              <AlertIcon className="h-4 w-4" /> could not load servers.
-            </p>
+            <div
+              role="alert"
+              className="flex flex-wrap items-center gap-3 border border-neutral-200 border-l-2 border-l-red-500 bg-white px-3 py-2.5 text-xs text-neutral-700"
+            >
+              <AlertIcon className="h-4 w-4 text-red-600" />
+              <span className="flex-1">could not load servers.</span>
+              <button
+                type="button"
+                onClick={() => setReloadTick((t) => t + 1)}
+                className="rounded-full bg-bloop px-3 py-1 font-wordmark text-xs font-bold text-neutral-900 transition-colors duration-150 hover:bg-bloop-deep hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-bloop-deep"
+              >
+                retry
+              </button>
+            </div>
           ) : filtered.length === 0 ? (
             <p className="py-8 text-center text-xs text-neutral-400">
               {query ? `nothing matches “${query}”.` : "no servers connected yet."}
@@ -185,13 +223,23 @@ export function MarketplaceModal({ onClose, onChanged }: MarketplaceModalProps) 
                       <button
                         type="button"
                         onClick={() => remove(s.id)}
+                        disabled={removingId === s.id}
                         aria-label={`remove ${s.name}`}
-                        className="rounded-full p-1.5 text-neutral-400 transition-colors duration-150 hover:bg-red-50 hover:text-red-600 focus-visible:outline-2 focus-visible:outline-bloop-deep"
+                        className="rounded-full p-1.5 text-neutral-400 transition-colors duration-150 hover:bg-red-50 hover:text-red-600 focus-visible:outline-2 focus-visible:outline-bloop-deep disabled:opacity-60"
                       >
-                        <TrashIcon className="h-3.5 w-3.5" />
+                        {removingId === s.id ? (
+                          <SpinnerIcon className="h-3.5 w-3.5" />
+                        ) : (
+                          <TrashIcon className="h-3.5 w-3.5" />
+                        )}
                       </button>
                     )}
                   </div>
+                  {removeErrorId === s.id && (
+                    <p role="alert" className="mt-2 text-[11px] text-red-600">
+                      couldn&rsquo;t remove this server — try again.
+                    </p>
+                  )}
                   <div className="mt-2.5 flex items-center gap-1.5">
                     <span className="rounded-full bg-neutral-100 px-2 py-0.5 text-[10px] font-semibold text-neutral-600">
                       {s.tool_count} {s.tool_count === 1 ? "tool" : "tools"}

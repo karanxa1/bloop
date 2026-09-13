@@ -17,7 +17,6 @@ export function AuthScreen({ onAuthed }: AuthScreenProps) {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [invite, setInvite] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -30,14 +29,12 @@ export function AuthScreen({ onAuthed }: AuthScreenProps) {
       const user =
         tab === "login"
           ? await login(email.trim(), password)
-          : await signup(email.trim(), password, name.trim(), invite.trim());
+          : await signup(email.trim(), password, name.trim());
       onAuthed(user);
     } catch (err) {
       if (err instanceof ApiError) {
         if (tab === "login" && err.status === 401)
           setError("wrong email or password.");
-        else if (tab === "signup" && err.status === 403)
-          setError("that invite code is not valid.");
         else if (tab === "signup" && err.status === 409)
           setError("an account with that email already exists.");
         else setError(err.message || "something went wrong.");
@@ -53,7 +50,11 @@ export function AuthScreen({ onAuthed }: AuthScreenProps) {
     <div className="relative flex h-full items-center justify-center overflow-hidden bg-bloop px-4 py-10">
       {/* hero photo + rings, same language as the landing + empty state */}
       <img
-        src="/assets/hero.jpg"
+        src="/assets/hero.webp"
+        width={1400}
+        height={933}
+        decoding="async"
+        fetchPriority="high"
         alt=""
         aria-hidden="true"
         className="absolute inset-0 h-full w-full object-cover opacity-40"
@@ -164,21 +165,6 @@ export function AuthScreen({ onAuthed }: AuthScreenProps) {
                 className={inputCls}
               />
             </div>
-            {tab === "signup" && (
-              <div>
-                <label htmlFor="auth-invite" className="mb-1 block text-[11px] font-semibold text-neutral-500">
-                  invite code
-                </label>
-                <input
-                  id="auth-invite"
-                  value={invite}
-                  onChange={(e) => setInvite(e.target.value)}
-                  required
-                  placeholder="bloop-XXXX"
-                  className={inputCls}
-                />
-              </div>
-            )}
 
             {error && (
               <div

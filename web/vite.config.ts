@@ -3,7 +3,8 @@ import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 
 export default defineConfig(({ mode }) => {
-  const env = loadEnv(mode, __dirname, "");
+  // envDir "." resolves against the vite root (web/) — avoids needing node types for __dirname
+  const env = loadEnv(mode, ".", "");
   const apiTarget = env.BLOOP_API ?? "http://localhost:8787";
   return {
     plugins: [react(), tailwindcss()],

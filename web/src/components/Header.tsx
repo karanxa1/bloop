@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { memo, useEffect, useRef, useState } from "react";
 import type { KeyboardEvent } from "react";
 import type { ModelInfo } from "../types";
 import { ChevronIcon, MenuIcon, PencilIcon, TraceIcon } from "../icons";
@@ -24,7 +24,7 @@ interface HeaderProps {
   onToggleTrace: () => void;
 }
 
-export function Header({
+export const Header = memo(function Header({
   health,
   title,
   canRename,
@@ -55,7 +55,7 @@ export function Header({
         onRename={onRename}
       />
 
-      <div className="ml-auto flex items-center gap-2">
+      <div className="ml-auto flex shrink-0 items-center gap-1.5 sm:gap-2">
         <ModelPicker models={models} value={model} onChange={onModelChange} />
         <HealthPill health={health} />
         <button
@@ -76,7 +76,7 @@ export function Header({
       </div>
     </header>
   );
-}
+});
 
 function TitleEditor({
   title,
@@ -169,7 +169,7 @@ function ModelPicker({
         id="model-picker"
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="appearance-none rounded-full border border-neutral-300 bg-white py-1.5 pl-3 pr-7 text-[11px] font-semibold text-neutral-700 transition-colors duration-150 hover:border-bloop focus:border-bloop focus:outline-none focus:ring-2 focus:ring-bloop/40"
+        className="max-w-[8.5rem] appearance-none truncate rounded-full border border-neutral-300 bg-white py-1.5 pl-3 pr-7 sm:max-w-none text-[11px] font-semibold text-neutral-700 transition-colors duration-150 hover:border-bloop focus:border-bloop focus:outline-none focus:ring-2 focus:ring-bloop/40"
       >
         {models.map((m) => (
           <option key={m.id} value={m.id}>

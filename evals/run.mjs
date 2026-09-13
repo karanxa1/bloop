@@ -55,10 +55,21 @@ const TASKS = [
   {
     id: "multi-app-digest",
     prompt:
-      "Check my github notifications (unread). Then use cf-docs to look up one fact about Cloudflare Durable Objects. Report: notification count + the fact. Keep it short.",
+      "List my 3 most recently pushed github repos. Then use cf-docs to look up one fact about Cloudflare Durable Objects. Report: repo names + the fact. Keep it short.",
     expect: {
       toolApps: ["github", "cf-docs"],
       minToolCalls: 2,
+      mustWrite: false
+    }
+  },
+  {
+    id: "sandbox-code-exec",
+    prompt:
+      "Use run_code to compute the 15th fibonacci number in python. Report just the number and the approach.",
+    expect: {
+      toolApps: [],
+      toolNames: ["run_code"],
+      minToolCalls: 1,
       mustWrite: false
     }
   },
@@ -119,6 +130,7 @@ async function runTask(task) {
   const appsUsed = new Set(
     toolCalls.map((e) => e.data.app).filter((a) => a && a !== "bloop" && a !== "local")
   );
+  const toolNames = new Set(toolCalls.map((e) => e.data.name));
   const writes = toolResults.filter(
     (e) =>
       e.data.ok &&
@@ -137,6 +149,13 @@ async function runTask(task) {
     task.expect.toolApps.every((a) => appsUsed.has(a)),
     [...appsUsed].join(",")
   );
+  if (task.expect.toolNames) {
+    check(
+      "tools used",
+      task.expect.toolNames.every((n) => toolNames.has(n)),
+      [...toolNames].join(",")
+    );
+  }
   check(
     "min tool calls",
     toolCalls.length >= task.expect.minToolCalls,

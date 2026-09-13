@@ -23,6 +23,12 @@ Living tracker for the v3 work specced in HANDOFF.md. `[x]` done · `[~]` in pro
 - [~] remove invite code — backend check deleted in auth.rs (lead) · signup form field + api (web agent)
 - [~] ui-perfect pass — research best agent app uis → `ui-spec.md` (research agent) · then 3 parallel implementers: (a) chat surface (b) chrome/modals/auth/trace (c) landing + tokens — launch after web agent lands
 
+- [x] readme rewritten around hackathon submission requirements (overview · external apps · setup · reliability methodology · demo link) — keep updated as each feature lands; flip v3 items from "in progress" to shipped only after prod verification
+- [ ] **user:** demo video (≤ 2 min) link → README · team member emails in submission form
+
+## hackathon (multiappagenthackathon.com)
+judging: technical execution 30% · reliability & evaluation 25% · usefulness 20% · originality 15% · demo clarity 10% · must connect ≥ 3 external apps · submit repo + ≤2 min video + readme
+
 ## release checklist
 - [ ] integrate agent work, cargo check + web build + sandbox typecheck
 - [ ] commit in logical units

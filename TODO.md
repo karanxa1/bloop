@@ -20,6 +20,15 @@ Living tracker for the v3 work specced in HANDOFF.md. `[x]` done · `[~]` in pro
 - [ ] **optional, user:** `CF_BROWSER_TOKEN` secret on bloop-sandbox for live-view handoff
 
 - [~] **build subagents + code workspace** — r2 `ws/<conv>/…` is source of truth · [x] sandbox `POST /workspace/exec` hydrate→run→sync — deployed 6196d465, container → standard-1 · [ ] core `workspace_{write,read,list,delete,exec}` built-ins, `workspace` sse, `delegate(kind: research|build)`, `/api/workspace/:conv/{files,file,exec}` (core agent) · [ ] web: lazy codemirror 6 editor panel (file tree, tabs, save, run, live refresh on `workspace` events) + richer subagent ui (launch after web agent lands)
+- [x] core v3 landed (d29c2c9): browse/handoff, parallel tools, live streaming merge, delegate research|build, modes, workspace built-ins + rest · 0 warnings, 9 tests
+- [~] images: azure gpt-image supports only png|jpeg (verified 400 on webp) → switch to jpeg q85 (~170kb), `edit_image` (core-agent)
+- [~] **skills** — d1 skills, progressive disclosure (`use_skill`), agent `create_skill`/`update_skill`, ≥8 prefab catalog skills, `/api/skills{,/catalog}` (core-agent) · skills marketplace ui (web, after web agent)
+- [~] **built-in tool toggles** — `/api/tools`, `user_settings` (core-agent) · tools tab (web)
+- [~] **think → tool → think** — azure responses reasoning summaries if supported (`thinking` sse) else one-line narration discipline (core-agent) · step timeline ui (web)
+- [~] **failure protection** — per-tool timeouts, per-server circuit breaker, `error_kind`/`retries`, invalid-args self-correction (core-agent) · mcp retries/backoff/re-init/classification (core-mcp)
+- [~] **mcp marketplace** — streamable http + legacy sse, bearer/headers/oauth 2.1 (dcr + pkce), `server_configs`, concurrent probes, verified catalog incl. higgsfield (core-mcp) · catalog with logos, custom mcp form, oauth connect flow (web)
+- [~] **mcp apps (ui)** — `call_tool_full`/`read_resource` (core-mcp) → `mcp_app` sse + r2 html + `/api/mcp/call` bridge (core-agent) · sandboxed iframe host + json-rpc bridge (web)
+- [~] handoff card: take over / done / skip (web agent)
 - [~] remove invite code — backend check deleted in auth.rs (lead) · signup form field + api (web agent)
 - [~] ui-perfect pass — research best agent app uis → `ui-spec.md` (research agent) · then 3 parallel implementers: (a) chat surface (b) chrome/modals/auth/trace (c) landing + tokens — launch after web agent lands
 

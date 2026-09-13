@@ -42,6 +42,21 @@ bloop connects to **any MCP server ever published** — and ships with 15+ wired
 
 Then try the [full 20-step self-test prompt](docs/USE-BLOOP.md#the-full-system-test-prompt) to exercise every subsystem in one run.
 
+## For the judges
+
+Everything the rubric asks for, in order:
+
+1. **Project overview** — bloop is a general-purpose agent that acts across your apps and
+   *proves* every action with a hash-chained read-back ledger. [Jump ↓](#why-bloop-is-different)
+2. **External apps used** — 15+ MCP servers out of the box; any other server joins by URL
+   with automatic auth detection. [Jump ↓](#external-apps)
+3. **Setup instructions** — `.dev.vars` + three commands; deploy in four.
+   [Jump ↓](#setup)
+4. **Reliability testing** — `evals/run.mjs` runs six tasks against the live deployment and
+   checks outcomes against *real GitHub state*, not bloop's own claims. Latest: 6/6.
+   [Jump ↓](#reliability--evaluation)
+5. **Demo video** — [watch on Loom](https://www.loom.com/share/fdcc943af2e24d599e647a1b5735f784) (~2 min).
+
 ## The hackathon brief, answered
 
 | Brief | How bloop answers |

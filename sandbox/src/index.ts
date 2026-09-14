@@ -1,5 +1,9 @@
 import puppeteer, { type Browser, type BrowserWorker, type Page } from "@cloudflare/puppeteer";
 import { getSandbox, Sandbox as BaseSandbox } from "@cloudflare/sandbox";
+
+// The containers runtime proxies container traffic through this WorkerEntrypoint
+// export — without it every container stays "starting" forever.
+export { ContainerProxy } from "@cloudflare/sandbox";
 // Browser builds of Readability + Turndown, bundled as text (see [[rules]] in
 // wrangler.toml) and evaluated inside the rendered page.
 import readabilitySrc from "@mozilla/readability/Readability.js";
@@ -365,10 +369,13 @@ async function handleRun(request: Request, env: Env): Promise<Response> {
 			// preserved; the SDK timeout above is only a backstop.
 			const result = await withColdStartRetry(
 				() =>
-					sandbox.exec(
+					// `sh` wraps in bash -c so `exit` ends the subprocess — exiting
+					// the session's own shell kills the session mid-request.
+					sh(
+						sandbox,
 						`cd /tmp && ${RUN_AS} timeout --signal=TERM --kill-after=5 ${EXEC_TIMEOUT_S} ${lang.cmd} ${path}; ` +
 							`code=$?; rm -f ${path}; exit $code`,
-						{ timeout: EXEC_TIMEOUT_MS },
+						EXEC_TIMEOUT_MS,
 					),
 				COLD_START_BUDGET_MS,
 			);

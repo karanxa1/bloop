@@ -116,6 +116,11 @@ pub async fn caller(req: &Request, env: &Env, allow_eval: bool) -> Option<(Strin
 }
 
 pub async fn signup(mut req: Request, env: Env) -> Result<Response> {
+    // Signups are closed unless SIGNUPS_OPEN="true" (var or secret) — flip it
+    // in wrangler.toml / `wrangler secret` to reopen. Logins are unaffected.
+    if config::env_str(&env, "SIGNUPS_OPEN").as_deref() != Some("true") {
+        return json_err("signups are paused right now — please check back later", 403);
+    }
     let body: Value = req.json().await.unwrap_or_else(|_| json!({}));
     let email = body
         .get("email")

@@ -111,10 +111,12 @@ pub async fn view(req: Request, env: &Env, user_id: &str) -> Result<Response> {
         Some(ws) => ws,
         None => return json_err("live view unavailable (no socket)", 502),
     };
+    upstream.as_ref().set_binary_type(web_sys::BinaryType::Arraybuffer);
     upstream.accept()?;
 
     let pair = WebSocketPair::new()?;
     let server = pair.server;
+    server.as_ref().set_binary_type(web_sys::BinaryType::Arraybuffer);
     server.accept()?;
     wasm_bindgen_futures::spawn_local(relay(server, upstream));
     Response::from_websocket(pair.client)

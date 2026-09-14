@@ -235,6 +235,7 @@ async fn relay_start(req: Request, env: &Env, user_id: &str) -> Result<Response>
     let Some(upstream) = up_resp.websocket() else {
         return json_err(&format!("voice upstream refused ({})", up_status), 502);
     };
+    upstream.as_ref().set_binary_type(web_sys::BinaryType::Arraybuffer);
     upstream.accept()?;
 
     // Newest session wins: older relays for this user notice and close themselves.
@@ -247,6 +248,9 @@ async fn relay_start(req: Request, env: &Env, user_id: &str) -> Result<Response>
 
     let pair = WebSocketPair::new()?;
     let server = pair.server;
+    // The runtime defaults binaryType to "blob"; Uint8Array::new(blob) is empty,
+    // so every binary audio frame would silently drop. Force arraybuffer.
+    server.as_ref().set_binary_type(web_sys::BinaryType::Arraybuffer);
     server.accept()?;
     wasm_bindgen_futures::spawn_local(relay(env.clone(), user_id.to_string(), nonce, server, upstream));
     Response::from_websocket(pair.client)
